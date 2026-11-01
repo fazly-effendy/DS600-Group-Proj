@@ -13,10 +13,18 @@
 </div>
 
 <section class="tiles">
-  <div class="tile"><div class="tile-label">Clients</div><div class="tile-value">{{ stats.clients }}</div></div>
-  <div class="tile"><div class="tile-label">Discussions saved</div><div class="tile-value">{{ stats.snapshots }}</div></div>
-  <div class="tile"><div class="tile-label">This month</div><div class="tile-value">{{ stats.this_month }}</div></div>
-  <div class="tile {{ 'alert' if stats.due }}"><div class="tile-label">Follow-ups due</div><div class="tile-value">{{ stats.due }}</div></div>
+  <a class="tile tile-link" href="{{ url_for('main.clients') }}" aria-label="View all clients">
+    <div class="tile-label">Clients</div><div class="tile-value">{{ stats.clients }}</div><span class="tile-action">View clients →</span>
+  </a>
+  <a class="tile tile-link" href="{{ url_for('main.snapshots') }}" aria-label="View all saved discussions">
+    <div class="tile-label">Discussions saved</div><div class="tile-value">{{ stats.snapshots }}</div><span class="tile-action">View discussions →</span>
+  </a>
+  <a class="tile tile-link" href="{{ url_for('main.snapshots', date_from=month_start) }}" aria-label="View this month's discussions">
+    <div class="tile-label">This month</div><div class="tile-value">{{ stats.this_month }}</div><span class="tile-action">View this month →</span>
+  </a>
+  <a class="tile tile-link {{ 'alert' if stats.due }}" href="{{ url_for('main.snapshots', follow_up='due') }}" aria-label="View follow-ups due">
+    <div class="tile-label">Follow-ups due</div><div class="tile-value">{{ stats.due }}</div><span class="tile-action">Review follow-ups →</span>
+  </a>
 </section>
 
 <form class="quick-compare card" action="{{ url_for('main.compare') }}" method="get">

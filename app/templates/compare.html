@@ -4,14 +4,20 @@
 <div class="page-head">
   <div>
     <h1>Compare companies</h1>
-    <p class="muted">Enter 2–{{ max_tickers }} ticker symbols. Singapore stocks use the <code>.SI</code> suffix (DBS = <code>D05.SI</code>).</p>
+    <p class="muted">Search by company name or enter 2–{{ max_tickers }} ticker symbols. Singapore stocks use the <code>.SI</code> suffix (DBS = <code>D05.SI</code>).</p>
   </div>
 </div>
 
 <form id="compare-form" class="card compare-form">
   <div class="field grow">
-    <label for="tickers">Tickers</label>
-    <input id="tickers" name="tickers" value="{{ initial }}" placeholder="AAPL, MSFT, GOOGL" required>
+    <label for="tickers">Companies or tickers</label>
+    <div class="company-search">
+      <input id="tickers" name="tickers" value="{{ initial }}" placeholder="Search Apple or enter AAPL, MSFT…"
+             autocomplete="off" role="combobox" aria-autocomplete="list"
+             aria-controls="company-suggestions" aria-expanded="false" required>
+      <div id="company-suggestions" class="company-suggestions" role="listbox" hidden></div>
+    </div>
+    <span class="hint">Search by company name, or enter 2–{{ max_tickers }} ticker symbols separated by commas.</span>
     <div class="chips small-chips">
       <span class="muted small">Try:</span>
       <button type="button" class="chip" data-preset="D05.SI,O39.SI,U11.SI">SG banks</button>
@@ -23,7 +29,7 @@
   <div class="field">
     <label for="period">Period</label>
     <select id="period" name="period">
-      {% for p in periods %}<option value="{{ p }}" {{ 'selected' if p == '1y' }}>{{ p }}</option>{% endfor %}
+      {% for p in periods %}<option value="{{ p }}" {{ 'selected' if p == initial_period }}>{{ p }}</option>{% endfor %}
     </select>
   </div>
   <button class="btn primary">Compare</button>
@@ -35,7 +41,18 @@
 </div>
 
 <div id="results" hidden>
-  <!-- 1. Price performance -->
+  <!-- 1. At-a-glance company cards -->
+  <section class="card">
+    <div class="section-head">
+      <div>
+        <h2>At a glance</h2>
+        <p class="muted small section-note">Key figures for a quick client conversation.</p>
+      </div>
+    </div>
+    <div id="overview-cards" class="overview-grid"></div>
+  </section>
+
+  <!-- 2. Price performance -->
   <section class="card">
     <div class="section-head">
       <h2>Price performance</h2>
@@ -48,36 +65,45 @@
     <div class="chart-wrap"><canvas id="price-chart"></canvas></div>
   </section>
 
-  <!-- 2. Summary table -->
+  <!-- 3. Summary table -->
   <section class="card">
     <h2>Summary</h2>
     <div class="table-wrap"><table class="table" id="summary-table"></table></div>
     <p class="muted small">Volatility is annualised from daily returns. Max drawdown is the largest fall from a previous peak during the period.</p>
   </section>
 
-  <!-- 3. Correlation -->
-  <section class="card">
-    <h2>How closely do they move together?</h2>
-    <p class="muted small">Correlation of daily returns: 1 means they move in lockstep, 0 means no relationship. Low correlation helps diversify a client's portfolio.</p>
-    <div class="table-wrap"><table class="table corr" id="corr-table"></table></div>
-  </section>
-
-  <!-- 4. Fundamentals with industry templates -->
-  <section class="card">
-    <div class="section-head">
-      <h2>Financial ratios &amp; trends</h2>
-      <label class="inline">Industry template
-        <select id="template-select">
-          {% for key, t in templates.items() %}<option value="{{ key }}">{{ t.label }}</option>{% endfor %}
-        </select>
-      </label>
+  <!-- 4. Correlation (advanced, collapsed by default) -->
+  <details class="card disclosure">
+    <summary>
+      <span><b>Correlation &amp; diversification</b><small>See how closely the companies move together.</small></span>
+    </summary>
+    <div class="disclosure-body">
+      <p class="muted small">Correlation of daily returns: 1 means they move in lockstep, 0 means no relationship. Low correlation helps diversify a client's portfolio.</p>
+      <div class="table-wrap"><table class="table corr" id="corr-table"></table></div>
     </div>
-    <p class="muted small" id="template-desc"></p>
-    <div class="table-wrap"><table class="table" id="valuation-table"></table></div>
-    <div id="trend-charts" class="trend-grid"></div>
-  </section>
+  </details>
 
-  <!-- 5. Save for a client -->
+  <!-- 5. Fundamentals with industry templates (loaded only when opened) -->
+  <details class="card disclosure" id="fundamentals-panel">
+    <summary>
+      <span><b>Financial ratios &amp; trends</b><small>Open the detailed industry-specific analysis.</small></span>
+    </summary>
+    <div class="disclosure-body">
+      <div class="section-head">
+        <h2 class="visually-hidden">Financial ratios &amp; trends</h2>
+        <label class="inline">Industry template
+          <select id="template-select">
+            {% for key, t in templates.items() %}<option value="{{ key }}">{{ t.label }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <p class="muted small" id="template-desc">Open this section to load financial statements.</p>
+      <div class="table-wrap"><table class="table" id="valuation-table"></table></div>
+      <div id="trend-charts" class="trend-grid"></div>
+    </div>
+  </details>
+
+  <!-- 6. Save for a client -->
   <section class="card">
     <h2>Save for a client conversation</h2>
     <p class="muted small">Record today's price and your notes against a client so you can pick up the conversation later.</p>
@@ -89,7 +115,10 @@
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-  window.NIMBUS = { newSnapshotUrl: "{{ url_for('main.snapshot_new') }}" };
+  window.NIMBUS = {
+    newSnapshotUrl: "{{ url_for('main.snapshot_new') }}",
+    companyDirectory: {{ company_directory|tojson }}
+  };
 </script>
 <script src="{{ url_for('static', filename='js/compare.js') }}"></script>
 {% endblock %}

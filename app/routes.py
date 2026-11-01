@@ -11,7 +11,7 @@ from sqlalchemy import func
 from .api import parse_tickers
 from .auth import login_required
 from .industry import TEMPLATES
-from .market import PERIODS, MarketDataError
+from .market import DEMO_COMPANIES, PERIODS, MarketDataError
 from .models import Client, Snapshot, db
 
 bp = Blueprint("main", __name__)
@@ -74,7 +74,8 @@ def dashboard():
         "due": base.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= today).count(),
     }
     return render_template("dashboard.html", stats=stats, follow_ups=follow_ups,
-                           recent=recent, top_tickers=top_tickers, today=today)
+                           recent=recent, top_tickers=top_tickers, today=today,
+                           month_start=today.replace(day=1).isoformat())
 
 
 # --------------------------------------------------------------------------
@@ -83,9 +84,18 @@ def dashboard():
 @bp.route("/compare")
 @login_required
 def compare():
+    initial_period = request.args.get("period", "1y")
+    if initial_period not in PERIODS:
+        initial_period = "1y"
+    company_directory = [
+        {"ticker": ticker, "name": details[0]}
+        for ticker, details in DEMO_COMPANIES.items()
+    ]
     return render_template("compare.html", periods=list(PERIODS), templates=TEMPLATES,
                            initial=request.args.get("tickers", ""),
-                           max_tickers=current_app.config["MAX_COMPARE_TICKERS"])
+                           initial_period=initial_period,
+                           max_tickers=current_app.config["MAX_COMPARE_TICKERS"],
+                           company_directory=company_directory)
 
 
 # --------------------------------------------------------------------------
@@ -163,6 +173,12 @@ def _filtered_snapshots():
         q = q.filter(Snapshot.discussed_on >= _parse_date(args["date_from"]))
     if _parse_date(args.get("date_to")):
         q = q.filter(Snapshot.discussed_on <= _parse_date(args["date_to"]))
+    if args.get("follow_up") == "due":
+        q = q.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= date.today())
+    elif args.get("follow_up") == "upcoming":
+        q = q.filter(Snapshot.follow_up_on > date.today())
+    elif args.get("follow_up") == "scheduled":
+        q = q.filter(Snapshot.follow_up_on.isnot(None))
     if args.get("q"):
         like = f"%{args['q'].strip()}%"
         q = q.filter(db.or_(Snapshot.notes.ilike(like), Snapshot.tags.ilike(like),
