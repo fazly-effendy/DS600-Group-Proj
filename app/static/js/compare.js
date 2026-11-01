@@ -142,7 +142,9 @@
 
   // ---------- 1. at-a-glance cards ----------
   function renderOverview() {
-    $('overview-cards').innerHTML = state.data.companies.map((company, i) => {
+    const overview = $('overview-cards');
+    overview.className = `overview-grid overview-grid-${state.data.companies.length}`;
+    overview.innerHTML = state.data.companies.map((company, i) => {
       const stats = company.stats;
       const totalReturn = stats.total_return;
       const returnClass = totalReturn >= 0 ? 'up' : 'down';
@@ -151,10 +153,12 @@
           <div class="overview-company" title="${esc(companyLabel(company))}">${esc(companyLabel(company))}</div>
           <span class="ticker">${esc(company.ticker)}</span>
         </div>
+        <div class="muted small overview-sector">${esc(company.sector || 'Sector unavailable')}</div>
         <div class="overview-return ${returnClass}">${fmt.pct(totalReturn, true)}</div>
         <div class="muted small">Return over ${esc(state.data.period)}</div>
         <div class="overview-metrics">
           <div class="overview-metric"><span>Last price</span><b>${esc(company.currency)} ${fmt.price(company.last_price)}</b></div>
+          <div class="overview-metric"><span>Market cap</span><b>${fmt.money(company.market_cap)}</b></div>
           <div class="overview-metric"><span>Volatility</span><b>${fmt.pct(stats.annual_vol)}</b></div>
           <div class="overview-metric"><span>Max drawdown</span><b>${fmt.pct(stats.max_drawdown)}</b></div>
         </div>
