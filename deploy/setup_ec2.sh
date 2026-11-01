@@ -44,19 +44,30 @@ done
 
 echo "==> Installing systemd service"
 cp "$APP_DIR/deploy/nimbus.service" /etc/systemd/system/nimbus.service
+cp "$APP_DIR/deploy/nimbus-archive.service" /etc/systemd/system/nimbus-archive.service
 systemctl daemon-reload
 systemctl enable nimbus
 systemctl restart nimbus
+if grep -Eq '^SNAPSHOT_ARCHIVE_BUCKET=.+$' "$APP_DIR/.env"; then
+  cp "$APP_DIR/deploy/nimbus-archive.timer" /etc/systemd/system/nimbus-archive.timer
+  systemctl daemon-reload
+  systemctl enable --now nimbus-archive.timer
+fi
 
 echo "==> Configuring Nginx"
-cp "$APP_DIR/deploy/nginx.conf" /etc/nginx/nginx.conf
+if [ "${NIMBUS_PUBLIC_ORIGIN:-false}" = "true" ]; then
+  cp "$APP_DIR/deploy/nginx-public.conf" /etc/nginx/nginx.conf
+else
+  cp "$APP_DIR/deploy/nginx-cloudfront.conf" /etc/nginx/nginx.conf
+fi
 nginx -t
 systemctl enable nginx
 systemctl restart nginx
 
 echo "==> Health check"
 for i in $(seq 1 15); do
-  if curl -fsS http://127.0.0.1/api/health; then
+  # Nginx requires CloudFront's origin token; probe the app directly instead.
+  if curl -fsS http://127.0.0.1:8000/api/health; then
     echo
     echo "Nimbus RM is running."
     exit 0

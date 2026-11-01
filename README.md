@@ -34,7 +34,7 @@ Group 1 project, extending the Nimbus case study. A relationship manager (RM) ca
 
 ```mermaid
 flowchart LR
-    U[RM's browser] -->|HTTP :80| IGW[Internet Gateway]
+    U[RM's browser] -->|HTTPS| CF[CloudFront]
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
         subgraph PUB["Public subnet 10.0.1.0/24"]
             EC2["EC2 · Amazon Linux 2023<br/>Nginx → Gunicorn → Flask"]
@@ -44,27 +44,32 @@ flowchart LR
         end
         EC2 -->|MySQL :3306<br/>allowed by DB security group| RDS
     end
-    IGW --> EC2
+    EIP["Elastic IP"] -.->|stable origin address| EC2
+    CF -->|HTTP :80 + origin token| EIP
+    EC2 -->|Internet egress| IGW[Internet Gateway]
     EC2 -->|HTTPS| YF[Yahoo Finance]
-    IAM[IAM instance profile] -.-> EC2
+    IAM["Existing LabInstanceProfile"] -.-> EC2
 ```
 
 | AWS service | How Nimbus RM uses it |
 |---|---|
-| **Amazon VPC** | Isolated network with two public and two private subnets across two Availability Zones. The public route table points to an Internet Gateway; the private route table has no internet route, so the database cannot be reached from outside. |
-| **Amazon EC2** | `t3.micro` running Amazon Linux 2023. Nginx serves static files and forwards requests to Gunicorn, which runs the Flask app as a `systemd` service that restarts automatically. |
-| **Amazon RDS** | MySQL database in the private subnets (not publicly accessible, storage encrypted, daily backups) holding users, clients and discussion snapshots. |
-| **IAM** | The EC2 instance uses an instance profile (`LabInstanceProfile` in Learner Lab, or a least-privilege role the template creates with SSM + CloudWatch permissions). Team members should use their own IAM users rather than the root account. |
-| **Security groups** | `nimbus-web-sg` allows HTTP (80) from anywhere and SSH (22) from an admin IP. `nimbus-db-sg` allows MySQL (3306) **only** from `nimbus-web-sg` — not from any IP address. |
+| **Amazon CloudFront** | Public entry point with HTTPS from its default `cloudfront.net` certificate. Dynamic caching is disabled and session cookies/query parameters are forwarded. Nginx requires a secret origin header to deter direct-origin access. |
+| **Amazon VPC** | A VPC contains one public subnet for EC2 and two private subnets in separate Availability Zones for the RDS subnet group. The public subnet routes through an Internet Gateway; the private subnets have no internet route. Security groups permit HTTP to the web server and MySQL only from that server to RDS. |
+| **Amazon EC2 and EBS** | A small Amazon Linux 2023 instance runs Nginx and Gunicorn/Flask as a `systemd` service, with an encrypted 8 GiB `gp2` EBS root volume. It needs outbound internet access for installation and Yahoo Finance; a NAT gateway is avoided to reduce sandbox cost. |
+| **Elastic IP** | A stable public address is attached to EC2 and used as CloudFront's origin, so the origin address survives an instance stop/start. |
+| **Amazon RDS** | A 20 GiB, encrypted, single-AZ MySQL database in the private subnets holds users, clients and discussion snapshots. Its endpoint is not public and its security group accepts MySQL only from the EC2 security group. |
+| **Amazon S3** | A private, encrypted archive bucket stores snapshots with a `discussed_on` date older than five years; objects transition to Glacier Flexible Retrieval after 30 days. Glacier is an S3 storage class here, not a separately provisioned resource. |
+| **IAM** | The EC2 instance uses the sandbox's existing `LabInstanceProfile` for Systems Manager and, if permitted by its existing policies, S3 archive access. The sandbox does not allow creating IAM roles or policies. |
+| **AWS CloudFormation** | Creates and manages the infrastructure as a stack, making the sandbox deployment reproducible and removable. |
 
-All of this is defined as code in [`infra/nimbus-stack.yaml`](infra/nimbus-stack.yaml) (CloudFormation), and can also be built by hand in the console — see the [deployment guide](docs/DEPLOYMENT.md).
+The deployment is defined in [`infra/nimbus-merged-stack.yaml`](infra/nimbus-merged-stack.yaml). Its architecture, setup steps, resource rationales and limitations are documented in the [CloudFront sandbox guide](docs/CLOUDFRONT_SANDBOX.md), with the lab's full restrictions in [AWS Academy sandbox limitations](docs/AWS_ACADEMY_SANDBOX_LIMITATIONS.txt). Old discussion snapshots are archived monthly to a private S3 bucket and transitioned to Glacier Flexible Retrieval.
 
 ---
 
 ## Project structure
 
 ```
-nimbus-rm/
+DS600-Group-Proj/
 ├── app/
 │   ├── __init__.py        # App factory, CSRF protection, template filters
 │   ├── config.py          # Settings from environment variables (.env)
@@ -74,17 +79,23 @@ nimbus-rm/
 │   ├── api.py             # JSON API used by the comparison page
 │   ├── routes.py          # HTML pages: dashboard, clients, discussions
 │   ├── auth.py            # Login, registration, logout
-│   ├── cli.py             # flask init-db / create-user / seed-demo
+│   ├── cli.py             # flask init-db / create-user / seed-demo / archive-snapshots
+│   ├── archive.py         # Verified export of old snapshots to S3
 │   ├── templates/         # Jinja2 HTML templates
 │   └── static/            # CSS and the comparison page's JavaScript (Chart.js)
-├── infra/nimbus-stack.yaml  # CloudFormation: VPC, subnets, SGs, RDS, IAM, EC2
+├── infra/
+│   └── nimbus-merged-stack.yaml # CloudFront sandbox stack with S3 snapshot archive
 ├── deploy/
+│   ├── nginx-cloudfront.conf # Origin-token guard for the CloudFront deployment
+│   ├── nginx-public.conf    # Optional direct-origin Nginx config
 │   ├── setup_ec2.sh       # Installs and starts the app on EC2
-│   ├── update.sh          # Pulls new code from GitHub and restarts
+│   ├── update.sh          # Pulls new code from GitHub and restarts the app
 │   ├── nimbus.service     # systemd unit for Gunicorn
-│   └── nginx.conf         # Nginx reverse-proxy config
+│   ├── nimbus-archive.service # systemd service for snapshot archiving
+│   └── nimbus-archive.timer # Monthly archive schedule
 ├── docs/
-│   ├── DEPLOYMENT.md      # Step-by-step AWS deployment guide
+│   ├── CLOUDFRONT_SANDBOX.md # Sandbox deployment steps, rationale, considerations
+│   ├── AWS_ACADEMY_SANDBOX_LIMITATIONS.txt # AWS Academy lab restrictions and access instructions
 │   ├── schema.sql         # Database schema (for reference/report)
 │   └── screenshots/
 ├── tests/                 # pytest suite (runs offline)
@@ -101,8 +112,8 @@ nimbus-rm/
 Requires Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/<your-team>/nimbus-rm.git
-cd nimbus-rm
+git clone https://github.com/pujoglekar2026/DS600-Group-Proj.git
+cd DS600-Group-Proj
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -130,12 +141,17 @@ python -m pytest -q                               # run the tests
 
 ## Deploy to AWS
 
-Full instructions, including the AWS Academy Learner Lab specifics, are in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. In short:
+For the AWS Academy sandbox deployment with CloudFront, follow **[docs/CLOUDFRONT_SANDBOX.md](docs/CLOUDFRONT_SANDBOX.md)**. In short:
 
 1. Push this repository to GitHub (public, so EC2 can clone it).
-2. In the AWS console, open **CloudFormation → Create stack**, upload `infra/nimbus-stack.yaml`, and fill in the GitHub URL, a database password and a secret key.
-3. Wait about 15 minutes, then open the `WebsiteURL` from the stack's **Outputs** tab.
-4. SSH in once to create logins: `cd /opt/nimbus && sudo -u nimbus .venv/bin/flask --app wsgi seed-demo`.
+2. In **us-east-1**, create a CloudFormation stack from `infra/nimbus-merged-stack.yaml` and enter the repository URL and generated secrets.
+3. Wait for CloudFront to report **Deployed**, then open the `ApplicationURL` stack output.
+4. Use Systems Manager Session Manager to seed the demo login on EC2.
+
+   ```bash
+   cd /opt/nimbus
+   sudo -u nimbus .venv/bin/flask --app wsgi seed-demo
+   ```
 
 To ship a code change: push to GitHub, then on the server run `sudo bash /opt/nimbus/deploy/update.sh`.
 
