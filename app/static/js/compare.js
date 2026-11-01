@@ -291,8 +291,9 @@
   // ---------- 5. save buttons ----------
   function renderSaveButtons() {
     $('save-buttons').innerHTML = state.data.companies.map((c) => {
-      const url = `${window.NIMBUS.newSnapshotUrl}?ticker=${encodeURIComponent(c.ticker)}&price=${c.last_price ?? ''}`;
-      return `<a class="chip accent" href="${url}">Save ${esc(companyLabel(c))} @ ${fmt.price(c.last_price)}</a>`;
+      // No price in the link: the server fetches the live price when the RM saves.
+      const url = `${window.NIMBUS.newSnapshotUrl}?ticker=${encodeURIComponent(c.ticker)}`;
+      return `<a class="chip accent" href="${url}">Save ${esc(companyLabel(c))}</a>`;
     }).join('');
   }
 

@@ -203,10 +203,10 @@ def snapshots_export():
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Discussed on", "Client code", "Client name", "Ticker", "Company", "Price",
-                     "Currency", "Interest", "Tags", "Notes", "Follow up on"])
+                     "Currency", "Price source", "Interest", "Tags", "Notes", "Follow up on"])
     for s in _filtered_snapshots().all():
         writer.writerow([s.discussed_on, s.client.client_code, s.client.name, s.ticker, s.company_name,
-                         s.price_at_discussion, s.currency, s.interest_level, s.tags or "", s.notes or "",
+                         s.price_at_discussion, s.currency, s.price_source or "not recorded", s.interest_level, s.tags or "", s.notes or "",
                          s.follow_up_on or ""])
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=nimbus_snapshots.csv"})
@@ -230,12 +230,18 @@ def _fill_snapshot(snap, form):
         except (ValueError, TypeError):
             return "Choose a client."
 
-    # Price: what the RM typed, otherwise the latest market price.
+    # Demo data is only acceptable when the app was deliberately started in demo
+    # mode (MARKET_DATA_PROVIDER=demo, e.g. offline or in tests). A silent fallback
+    # to demo data must never end up in a client record as a real price.
+    demo_mode = current_app.config["MARKET_DATA_PROVIDER"] == "demo"
+
+    # Price: what the RM typed, otherwise the latest live market price.
     price_raw = form.get("price", "").strip()
     company, currency = None, "USD"
     try:
-        info = market().info(ticker)["data"]
-        company, currency = info["name"], info["currency"]
+        info = market().info(ticker)
+        if info["source"] != "demo" or demo_mode:
+            company, currency = info["data"]["name"], info["data"]["currency"]
     except MarketDataError:
         pass
     if price_raw:
@@ -245,11 +251,20 @@ def _fill_snapshot(snap, form):
                 raise InvalidOperation
         except InvalidOperation:
             return "Price must be a positive number."
+        # Editing other fields keeps the original source if the price is unchanged.
+        unchanged = (snap.price_at_discussion is not None and snap.ticker == ticker
+                     and Decimal(snap.price_at_discussion) == price)
+        source = snap.price_source if unchanged else "manual"
     else:
         try:
-            price = Decimal(str(market().latest_price(ticker)["price"]))
+            quote = market().latest_price(ticker)
         except MarketDataError as exc:
-            return f"Couldn't fetch a price for {ticker} ({exc}). Type the price in manually."
+            return f"Couldn't fetch a live price for {ticker} ({exc}). Type the price you discussed instead."
+        if quote["source"] == "demo" and not demo_mode:
+            return (f"No live price is available for {ticker} right now (Yahoo Finance did not respond). "
+                    "Type the price you discussed, or try again in a few minutes.")
+        price = Decimal(str(quote["price"]))
+        source = quote["source"]
 
     level = form.get("interest_level", "Medium")
     snap.client = client
@@ -258,6 +273,7 @@ def _fill_snapshot(snap, form):
     snap.company_name = company or snap.company_name or ticker
     snap.currency = currency
     snap.price_at_discussion = price
+    snap.price_source = source
     snap.discussed_on = _parse_date(form.get("discussed_on"), date.today())
     snap.interest_level = level if level in Snapshot.INTEREST_LEVELS else "Medium"
     snap.tags = ", ".join(t.strip() for t in form.get("tags", "").split(",") if t.strip())[:255] or None
@@ -282,8 +298,8 @@ def snapshot_new():
         db.session.commit()
         flash(f"Saved discussion with {snap.client.label} about {snap.ticker}.", "success")
         return redirect(url_for("main.client_detail", client_id=snap.client_id))
-    prefill = {"ticker": request.args.get("ticker", ""), "price": request.args.get("price", ""),
-               "client_id": request.args.get("client_id", "")}
+    # The price is never taken from the URL: it is fetched live on save, or typed by the RM.
+    prefill = {"ticker": request.args.get("ticker", ""), "client_id": request.args.get("client_id", "")}
     return render_template("snapshot_form.html", snap=None, form=prefill, clients=clients,
                            levels=Snapshot.INTEREST_LEVELS, today=date.today())
 

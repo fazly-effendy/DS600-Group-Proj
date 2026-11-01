@@ -256,3 +256,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
   .overview-grid-5 .overview-card:nth-child(4),
   .overview-grid-5 .overview-card:nth-child(5) { grid-column: auto; }
 }
+
+/* Where a saved price came from; demo data is always flagged. */
+.source { font-size: .75rem; color: var(--muted); font-family: inherit; }
+.source.demo { color: #b42318; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }

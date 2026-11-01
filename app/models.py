@@ -63,6 +63,12 @@ class Snapshot(db.Model):
     __tablename__ = "snapshots"
 
     INTEREST_LEVELS = ("High", "Medium", "Low")
+    # Where price_at_discussion came from. Older rows have no value ("not recorded").
+    PRICE_SOURCE_LABELS = {
+        "yahoo": "Yahoo Finance",
+        "manual": "Entered by RM",
+        "demo": "Demo data",
+    }
 
     id = db.Column(db.Integer, primary_key=True)
     rm_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
@@ -71,6 +77,7 @@ class Snapshot(db.Model):
     company_name = db.Column(db.String(160))
     price_at_discussion = db.Column(db.Numeric(14, 4), nullable=False)
     currency = db.Column(db.String(8), default="USD")
+    price_source = db.Column(db.String(16))  # yahoo / manual / demo
     discussed_on = db.Column(db.Date, default=date.today, nullable=False, index=True)
     interest_level = db.Column(db.String(10), default="Medium")
     tags = db.Column(db.String(255))  # comma separated, e.g. "dividends, ESG"
@@ -80,6 +87,14 @@ class Snapshot(db.Model):
 
     rm = db.relationship("User", back_populates="snapshots")
     client = db.relationship("Client", back_populates="snapshots")
+
+    @property
+    def price_source_label(self) -> str:
+        return self.PRICE_SOURCE_LABELS.get(self.price_source or "", "Source not recorded")
+
+    @property
+    def is_demo(self) -> bool:
+        return self.price_source == "demo"
 
     @property
     def tag_list(self):
@@ -94,9 +109,43 @@ class Snapshot(db.Model):
             "company_name": self.company_name,
             "price_at_discussion": float(self.price_at_discussion),
             "currency": self.currency,
+            "price_source": self.price_source,
             "discussed_on": self.discussed_on.isoformat(),
             "interest_level": self.interest_level,
             "tags": self.tag_list,
             "notes": self.notes or "",
             "follow_up_on": self.follow_up_on.isoformat() if self.follow_up_on else None,
         }
+
+
+# Columns added after the first release. db.create_all() creates missing tables
+# but never alters existing ones, so an RDS database created earlier needs these
+# columns added once. Each entry: (table, column, SQL type).
+ADDED_COLUMNS = [
+    ("snapshots", "price_source", "VARCHAR(16)"),
+]
+
+
+def upgrade_schema() -> list[str]:
+    """Add any missing columns from ADDED_COLUMNS; return what was added.
+
+    Safe to run on every start and on several servers at once: a column that
+    another server has just added is detected and skipped.
+    """
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    added = []
+    for table, column, sql_type in ADDED_COLUMNS:
+        existing = {c["name"] for c in inspect(db.engine).get_columns(table)}
+        if column in existing:
+            continue
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
+            added.append(f"{table}.{column}")
+        except (OperationalError, ProgrammingError):
+            # Another server added it first ("duplicate column"); check and move on.
+            if column not in {c["name"] for c in inspect(db.engine).get_columns(table)}:
+                raise
+    return added

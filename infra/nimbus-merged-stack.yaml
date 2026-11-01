@@ -282,7 +282,7 @@ Resources:
           SNAPSHOT_ARCHIVE_BUCKET=${SnapshotArchiveBucket}
           AWS_DEFAULT_REGION=${AWS::Region}
           MARKET_DATA_PROVIDER=yahoo
-          DEMO_FALLBACK=true
+          DEMO_FALLBACK=false
           CACHE_TTL=900
           SESSION_COOKIE_SECURE=true
           ENVEOF

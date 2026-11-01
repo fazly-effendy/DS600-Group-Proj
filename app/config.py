@@ -30,6 +30,10 @@ def build_database_uri() -> str:
     return f"mysql+pymysql://{user}:{password}@{host}:{port}/{name}?charset=utf8mb4"
 
 
+# Demo data must never be passed off as live data. It is off unless switched on.
+DEMO_FALLBACK_DEFAULT = False
+
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-me")
     SQLALCHEMY_DATABASE_URI = build_database_uri()
@@ -38,7 +42,7 @@ class Config:
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280}
 
     MARKET_DATA_PROVIDER = os.getenv("MARKET_DATA_PROVIDER", "yahoo").lower()
-    DEMO_FALLBACK = _bool("DEMO_FALLBACK", True)
+    DEMO_FALLBACK = _bool("DEMO_FALLBACK", DEMO_FALLBACK_DEFAULT)
     CACHE_TTL = int(os.getenv("CACHE_TTL", "900"))
     SNAPSHOT_ARCHIVE_BUCKET = os.getenv("SNAPSHOT_ARCHIVE_BUCKET", "")
 

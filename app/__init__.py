@@ -6,7 +6,7 @@ from flask import Flask, abort, render_template, request, session
 
 from .config import Config
 from .market import MarketData
-from .models import db
+from .models import db, upgrade_schema
 
 
 def create_app(config_class=Config):
@@ -72,7 +72,9 @@ def create_app(config_class=Config):
     with app.app_context():
         try:
             db.create_all()
+            for col in upgrade_schema():
+                app.logger.info("Added database column %s", col)
         except Exception as exc:  # e.g. two Gunicorn workers racing, or DB not up yet
-            app.logger.warning("Could not create tables at startup: %s", exc)
+            app.logger.warning("Could not create or upgrade tables at startup: %s", exc)
 
     return app

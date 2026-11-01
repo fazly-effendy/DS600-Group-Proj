@@ -26,7 +26,7 @@ Group 1 project, extending the Nimbus case study. A relationship manager (RM) ca
 - **"Since discussion" tracking** — each client's history shows the price when you spoke and the change since then, a ready-made talking point for the follow-up call.
 - **Follow-up reminders** — the dashboard lists follow-ups due in the next 14 days and flags overdue ones.
 - **Multiple RMs with private books** — each RM logs in and sees only their own clients and records.
-- **Resilient market data** — live data from Yahoo Finance via `yfinance`, cached for 15 minutes. If Yahoo is unavailable (it often rate-limits cloud servers), the app switches to clearly labelled demo data so a presentation never breaks.
+- **Honest market data** — live data from Yahoo Finance via `yfinance`, cached for 15 minutes. Every saved price records its source (*Yahoo Finance*, *Entered by RM* or *Demo data*). If Yahoo is unavailable, the app asks the RM to type the price instead of inventing one; demo data is used only when `MARKET_DATA_PROVIDER=demo` (offline work and tests) or, on the Compare page only, when `DEMO_FALLBACK=true`, and is always labelled. `DEMO_FALLBACK` is off by default and on AWS.
 
 ---
 

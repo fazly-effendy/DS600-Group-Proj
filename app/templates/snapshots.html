@@ -57,7 +57,7 @@
         <td class="nowrap">{{ s.discussed_on.strftime('%d %b %Y') }}</td>
         <td><a href="{{ url_for('main.client_detail', client_id=s.client_id) }}">{{ s.client.name }}</a><div class="muted small mono">{{ s.client.client_code }}</div></td>
         <td><span class="ticker">{{ s.ticker }}</span></td>
-        <td class="num mono">{{ s.price_at_discussion|money }}</td>
+        <td class="num mono">{{ s.price_at_discussion|money }}<div class="source small {{ 'demo' if s.is_demo }}">{{ s.price_source_label }}</div></td>
         {% if prices %}
           <td class="num mono">{{ now|money if now else '—' }}</td>
           <td class="num">{% if now %}{% set chg = now / (s.price_at_discussion|float) - 1 %}<span class="chg {{ 'up' if chg >= 0 else 'down' }}">{{ chg|pct(signed=True) }}</span>{% else %}—{% endif %}</td>

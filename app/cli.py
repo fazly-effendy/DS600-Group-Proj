@@ -7,7 +7,7 @@ import click
 from flask import current_app
 
 from .market import DemoProvider
-from .models import Client, Snapshot, User, db
+from .models import Client, Snapshot, User, db, upgrade_schema
 
 
 def register_cli(app):
@@ -15,6 +15,8 @@ def register_cli(app):
     def init_db():
         """Create all tables (safe to run more than once)."""
         db.create_all()
+        for col in upgrade_schema():
+            click.echo(f"Added column {col}.")
         click.echo("Database tables are ready.")
 
     @app.cli.command("archive-snapshots")
@@ -88,7 +90,7 @@ def register_cli(app):
                 db.session.add(Snapshot(
                     rm_id=user.id, client_id=client.id, ticker=ticker,
                     company_name=demo.info(ticker)["name"], currency=demo.info(ticker)["currency"],
-                    price_at_discussion=Decimal(str(price)),
+                    price_at_discussion=Decimal(str(price)), price_source="demo",
                     discussed_on=date.today() - timedelta(days=days_ago),
                     interest_level=rng.choice(Snapshot.INTEREST_LEVELS), tags=tags, notes=note,
                     follow_up_on=date.today() + timedelta(days=rng.randint(-5, 30)) if rng.random() < 0.6 else None,

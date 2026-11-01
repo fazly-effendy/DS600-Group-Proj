@@ -37,6 +37,7 @@ CREATE TABLE snapshots (
 	company_name VARCHAR(160), 
 	price_at_discussion NUMERIC(14, 4) NOT NULL, 
 	currency VARCHAR(8), 
+	price_source VARCHAR(16), 
 	discussed_on DATE NOT NULL, 
 	interest_level VARCHAR(10), 
 	tags VARCHAR(255), 

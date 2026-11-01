@@ -35,6 +35,7 @@
         </div>
         <div class="tl-prices">
           <span>Price then <b class="mono">{{ s.currency }} {{ s.price_at_discussion|money }}</b></span>
+          <span class="source {{ 'demo' if s.is_demo }}" title="Where this price came from">{{ s.price_source_label }}</span>
           {% if now %}
             <span>Now <b class="mono">{{ s.currency }} {{ now|money }}</b></span>
             {% set chg = (now / (s.price_at_discussion|float) - 1) %}
