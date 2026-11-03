@@ -71,6 +71,29 @@
     <p class="muted small">Volatility is annualised from daily returns. Max drawdown is the largest fall from a previous peak during the period.</p>
   </section>
 
+  <!-- 3b. Feature 1: financials, analyst ratings and sourced news, on the same screen -->
+  <section class="card" id="briefing-section">
+    <div class="section-head">
+      <div>
+        <h2>Financials, ratings &amp; news</h2>
+        <p class="muted small section-note">Latest fiscal year from each company's annual statements, Yahoo Finance analyst ratings, and recent news with its source.</p>
+      </div>
+    </div>
+    <div id="briefing-status" class="muted small" hidden></div>
+
+    <h3 class="subhead">Key financials</h3>
+    <div class="table-wrap"><table class="table" id="financials-table"></table></div>
+    <p class="muted small">Amounts are in each company's reporting currency (M = million, B = billion, T = trillion). Debt-to-equity = total debt ÷ shareholders' equity. "—" means Yahoo did not report the figure.</p>
+
+    <h3 class="subhead">Analyst ratings</h3>
+    <div class="table-wrap"><table class="table" id="ratings-table"></table></div>
+    <p class="muted small">Source: Yahoo Finance analyst consensus. Upside = mean price target ÷ latest closing price − 1.</p>
+
+    <h3 class="subhead">News</h3>
+    <div id="news-list" class="news-grid"></div>
+    <p class="muted small">Headlines and summaries are shown exactly as the source provides them; Nimbus never writes or rewrites a summary.</p>
+  </section>
+
   <!-- 4. Correlation (advanced, collapsed by default) -->
   <details class="card disclosure">
     <summary>

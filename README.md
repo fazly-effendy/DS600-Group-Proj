@@ -14,6 +14,7 @@ Group 1 project, extending the Nimbus case study. A relationship manager (RM) ca
 
 | Feature | What the RM can do | Workshop link |
 |---|---|---|
+| **One-screen company briefing** | For each company on the Compare page: key financials for the latest fiscal year (revenue, net income, total debt, equity in M/B), a fixed core row of revenue growth, net margin and debt-to-equity (flagged as not meaningful for banks), Yahoo Finance analyst ratings and price targets, and recent news with publisher, date, link and the source's own summary ("No summary provided by the source" when there is none) | Lesson 4, Feature 1 |
 | **Compare companies** | Pick 2–5 tickers and see their price performance on one chart, rebased to 100 or in actual prices, over 1 month to 5 years | Lesson 4, Feature 2 |
 | **Record discussion snapshots** | Save client ID, ticker, date, stock price at the time of discussion (fetched automatically), interest level, topic tags and notes | Lesson 4, Features 3 & 4 |
 | **Retrieve records** | Find past discussions by client or by company, search notes, filter by date or interest, export to CSV | Stored in Amazon RDS |
@@ -75,6 +76,7 @@ DS600-Group-Proj/
 │   ├── config.py          # Settings from environment variables (.env)
 │   ├── models.py          # Database tables: users, clients, snapshots
 │   ├── market.py          # Market data (Yahoo + demo), caching, analytics
+│   ├── news.py            # News (ticker feed, search + RSS fallback, relevance filter) and analyst ratings
 │   ├── industry.py        # Industry comparison templates and metric definitions
 │   ├── api.py             # JSON API used by the comparison page
 │   ├── routes.py          # HTML pages: dashboard, clients, discussions
@@ -183,6 +185,7 @@ To ship a code change: push to GitHub, then on the server run `sudo bash /opt/ni
 - **Secrets** — the database password is passed as a CloudFormation parameter. In production it should come from AWS Secrets Manager.
 - **Availability** — one EC2 instance and a single-AZ database. Next step: an Auto Scaling group across both public subnets behind the load balancer, and RDS Multi-AZ.
 - **Market data** — Yahoo Finance via `yfinance` is free but unofficial and may be delayed or rate-limited. A bank would use a licensed feed (Bloomberg, Refinitiv).
+- **News** — Yahoo's ticker news feed sometimes returns nothing; Nimbus then uses Yahoo search (only articles linked to the ticker that name the company) and Yahoo's RSS headline feed. RSS items have no publisher, and many search items have no summary; the page says so rather than writing one. In demo data mode no news or analyst ratings are shown at all.
 - Statement data covers the last 4–5 fiscal years; some companies (especially banks) don't report every line item, so some ratios show "—".
 
 *Market data is for discussion purposes only and is not investment advice.*

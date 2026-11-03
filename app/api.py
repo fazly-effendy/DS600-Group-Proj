@@ -110,6 +110,79 @@ def fundamentals():
     return jsonify({"template": tpl, "companies": out, "demo_data": "demo" in sources})
 
 
+FINANCIAL_KEYS = ("year", "revenue", "net_income", "total_debt", "equity",
+                  "revenue_growth", "net_margin", "debt_to_equity")
+
+
+def _latest_financials(ticker, sources):
+    """Latest fiscal year's statement lines plus the core ratios Gaurav asked for."""
+    try:
+        fund = market().fundamentals(ticker)
+    except MarketDataError as exc:
+        return {"error": str(exc)}
+    sources.add(fund["source"])
+    rows = fund["data"] or []
+    if not rows:
+        return {"error": "No financial statements available."}
+    latest = rows[-1]
+    return {**{k: latest.get(k) for k in FINANCIAL_KEYS}, "source": fund["source"]}
+
+
+def _ratings(ticker, sources):
+    try:
+        res = market().ratings(ticker)
+    except MarketDataError as exc:
+        return {"counts": None, "view": None, "message": str(exc), "source": None}
+    sources.add(res["source"])
+    data = res["data"]
+    view = dict(data["view"]) if data.get("view") else None
+    # Upside needs a live price; it is never computed from demo prices.
+    if view and view.get("target_mean") and res["source"] != "demo":
+        try:
+            px = market().latest_price(ticker)
+            if px["source"] != "demo" and px["price"]:
+                view["upside"] = view["target_mean"] / px["price"] - 1
+                view["price_used"] = px["price"]
+        except MarketDataError:
+            pass
+    return {"counts": data.get("counts"), "view": view, "message": data.get("message"), "source": res["source"]}
+
+
+def _news(ticker, name, sources):
+    try:
+        res = market().news(ticker, name)
+    except MarketDataError as exc:
+        return {"items": [], "status": "error", "message": str(exc), "route": None, "source": None}
+    sources.add(res["source"])
+    return {**res["data"], "source": res["source"]}
+
+
+@bp.route("/briefing")
+@login_required
+def briefing():
+    """Feature 1: key financials, analyst ratings and sourced news for each company.
+
+    Each part is fetched separately, so one failing part never hides the others.
+    """
+    tickers = _require_tickers(min_n=1)
+    companies, sources = [], set()
+    for t in tickers:
+        company = {"ticker": t, "name": t, "sector": None, "currency": None, "is_bank": False}
+        try:
+            info = market().info(t)
+            sources.add(info["source"])
+            data = info["data"]
+            company.update(name=data["name"], sector=data["sector"], currency=data["currency"],
+                           is_bank=data["sector"] == "Financial Services")
+        except MarketDataError as exc:
+            company["error"] = str(exc)
+        company["financials"] = _latest_financials(t, sources)
+        company["ratings"] = _ratings(t, sources)
+        company["news"] = _news(t, company["name"], sources)
+        companies.append(company)
+    return jsonify({"companies": companies, "demo_data": "demo" in sources})
+
+
 @bp.route("/templates")
 @login_required
 def templates():
