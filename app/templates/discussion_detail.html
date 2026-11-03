@@ -15,7 +15,7 @@
 
 <div class="flash info historical-banner" role="note">
   <b>Historical snapshot.</b> Everything on this page is exactly as saved on
-  {{ d.created_at.strftime('%d %b %Y, %H:%M') }} UTC{% if d.data_retrieved_at %} (market data retrieved {{ d.data_retrieved_at.strftime('%d %b %Y, %H:%M') }} UTC){% endif %}.
+  {{ d.created_at|localtime }}{% if d.data_retrieved_at %} (market data retrieved {{ d.data_retrieved_at|localtime }}){% endif %}.
   It is not refreshed. Source: <span class="source {{ 'demo' if d.is_demo }}">{{ d.source_label }}</span>.
 </div>
 
@@ -27,7 +27,7 @@
     <dt>Client interests</dt><dd class="prewrap">{{ d.client_interests }}</dd>
     {% if d.notes %}<dt>Notes</dt><dd class="prewrap">{{ d.notes }}</dd>{% endif %}
     {% if d.follow_up_on %}<dt>Follow up on</dt><dd>{{ d.follow_up_on.strftime('%d %b %Y') }}</dd>{% endif %}
-    <dt>Saved</dt><dd>{{ d.created_at.strftime('%d %b %Y, %H:%M') }} UTC</dd>
+    <dt>Saved</dt><dd>{{ d.created_at|localtime }}</dd>
   </dl>
   <div class="table-wrap">
     <table class="table">

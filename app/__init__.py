@@ -7,6 +7,7 @@ from flask import Flask, abort, render_template, request, session
 from .config import Config
 from .market import MarketData
 from .models import db, upgrade_schema
+from .timeutil import format_local
 
 
 def create_app(config_class=Config):
@@ -47,6 +48,10 @@ def create_app(config_class=Config):
             return f"{float(value):,.2f}"
         except (TypeError, ValueError):
             return "—"
+
+    @app.template_filter("localtime")
+    def localtime(value):
+        return format_local(value)
 
     @app.template_filter("pct")
     def pct(value, signed=False):

@@ -1,9 +1,9 @@
 """Archive old discussion snapshots to private S3 storage."""
 import hashlib
 import json
-from datetime import date
 
 from .models import Snapshot, db
+from .timeutil import local_today
 
 ARCHIVE_LOCK = "nimbus-archive"
 
@@ -80,7 +80,7 @@ def archive_snapshots(bucket, s3_client, years=5, today=None):
     """Archive snapshots discussed before the calendar-date cutoff; return count."""
     if years < 1:
         raise ValueError("Archive age must be at least one year.")
-    today = today or date.today()
+    today = today or local_today()
     try:
         cutoff = today.replace(year=today.year - years)
     except ValueError:

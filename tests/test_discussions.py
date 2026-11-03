@@ -326,3 +326,23 @@ def test_clients_list_counts_discussions_and_last_spoke():
     cells = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
     assert cells[0] == "C-1001"
     assert cells[4:7] == ["1", "0", "20 Oct 2026"]  # discussions, stock notes, last spoke
+
+
+def test_dates_and_times_follow_singapore_time(monkeypatch):
+    """Found on AWS (4 Nov): servers run on UTC, so at 03:47 SGT the app said 3 Nov."""
+    from datetime import datetime, timezone
+    from app import timeutil
+
+    frozen = datetime(2026, 11, 3, 19, 47, tzinfo=timezone.utc)  # 04 Nov 2026, 03:47 SGT
+    monkeypatch.setattr(timeutil, "_utcnow", lambda: frozen)
+    app = make_app()
+    rm = login(app)
+    assert b'value="2026-11-04"' in rm.get("/compare").data  # Save form's default date
+    did = discussion_id(save(rm, discussed_on=""))  # date left empty -> today in SGT
+    with app.app_context():
+        d = db.session.get(Discussion, did)
+        assert d.discussed_on == date(2026, 11, 4)
+        d.created_at = frozen.replace(tzinfo=None)  # stored as UTC
+        db.session.commit()
+    page = rm.get(f"/discussions/{did}").data
+    assert b"04 Nov 2026, 03:47 SGT" in page and b"UTC" not in page

@@ -1,8 +1,10 @@
 """Database tables, stored in Amazon RDS (MySQL) in production."""
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects import mysql
+
+from .timeutil import local_today
 from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
@@ -84,7 +86,7 @@ class Snapshot(db.Model):
     price_at_discussion = db.Column(db.Numeric(14, 4), nullable=False)
     currency = db.Column(db.String(8), default="USD")
     price_source = db.Column(db.String(16))  # yahoo / manual / demo
-    discussed_on = db.Column(db.Date, default=date.today, nullable=False, index=True)
+    discussed_on = db.Column(db.Date, default=local_today, nullable=False, index=True)
     interest_level = db.Column(db.String(10), default="Medium")
     tags = db.Column(db.String(255))  # comma separated, e.g. "dividends, ESG"
     notes = db.Column(db.Text)

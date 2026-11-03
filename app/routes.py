@@ -13,6 +13,7 @@ from .auth import login_required
 from .industry import TEMPLATES
 from .market import DEMO_COMPANIES, PERIODS, MarketDataError
 from .models import Client, Discussion, Snapshot, db
+from .timeutil import local_today
 
 bp = Blueprint("main", __name__)
 
@@ -59,7 +60,7 @@ def _latest_prices(tickers):
 @bp.route("/")
 @login_required
 def dashboard():
-    today = date.today()
+    today = local_today()
     base = Snapshot.query.filter_by(rm_id=g.user.id)
     follow_ups = (base.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= today + timedelta(days=14))
                   .order_by(Snapshot.follow_up_on).limit(10).all())
@@ -97,7 +98,7 @@ def compare():
                            initial_period=initial_period,
                            max_tickers=current_app.config["MAX_COMPARE_TICKERS"],
                            company_directory=company_directory,
-                           clients=clients, today=date.today())
+                           clients=clients, today=local_today())
 
 
 # --------------------------------------------------------------------------
@@ -159,7 +160,7 @@ def _create_client_from_form(form, prefix=""):
 def client_detail(client_id):
     client = _own_client(client_id)
     prices = _latest_prices([s.ticker for s in client.snapshots])
-    return render_template("client_detail.html", client=client, prices=prices, today=date.today())
+    return render_template("client_detail.html", client=client, prices=prices, today=local_today())
 
 
 @bp.route("/clients/<int:client_id>/delete", methods=["POST"])
@@ -189,9 +190,9 @@ def _filtered_snapshots():
     if _parse_date(args.get("date_to")):
         q = q.filter(Snapshot.discussed_on <= _parse_date(args["date_to"]))
     if args.get("follow_up") == "due":
-        q = q.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= date.today())
+        q = q.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= local_today())
     elif args.get("follow_up") == "upcoming":
-        q = q.filter(Snapshot.follow_up_on > date.today())
+        q = q.filter(Snapshot.follow_up_on > local_today())
     elif args.get("follow_up") == "scheduled":
         q = q.filter(Snapshot.follow_up_on.isnot(None))
     if args.get("q"):
@@ -289,7 +290,7 @@ def _fill_snapshot(snap, form):
     snap.currency = currency
     snap.price_at_discussion = price
     snap.price_source = source
-    snap.discussed_on = _parse_date(form.get("discussed_on"), date.today())
+    snap.discussed_on = _parse_date(form.get("discussed_on"), local_today())
     snap.interest_level = level if level in Snapshot.INTEREST_LEVELS else "Medium"
     snap.tags = ", ".join(t.strip() for t in form.get("tags", "").split(",") if t.strip())[:255] or None
     snap.notes = form.get("notes", "").strip() or None
@@ -308,7 +309,7 @@ def snapshot_new():
             db.session.rollback()
             flash(error, "error")
             return render_template("snapshot_form.html", snap=None, form=request.form, clients=clients,
-                                   levels=Snapshot.INTEREST_LEVELS, today=date.today())
+                                   levels=Snapshot.INTEREST_LEVELS, today=local_today())
         db.session.add(snap)
         db.session.commit()
         flash(f"Saved discussion with {snap.client.label} about {snap.ticker}.", "success")
@@ -316,7 +317,7 @@ def snapshot_new():
     # The price is never taken from the URL: it is fetched live on save, or typed by the RM.
     prefill = {"ticker": request.args.get("ticker", ""), "client_id": request.args.get("client_id", "")}
     return render_template("snapshot_form.html", snap=None, form=prefill, clients=clients,
-                           levels=Snapshot.INTEREST_LEVELS, today=date.today())
+                           levels=Snapshot.INTEREST_LEVELS, today=local_today())
 
 
 @bp.route("/snapshots/<int:snapshot_id>/edit", methods=["GET", "POST"])
@@ -340,7 +341,7 @@ def snapshot_edit(snapshot_id):
         "follow_up_on": snap.follow_up_on.isoformat() if snap.follow_up_on else "",
     }
     return render_template("snapshot_form.html", snap=snap, form=form, clients=clients,
-                           levels=Snapshot.INTEREST_LEVELS, today=date.today())
+                           levels=Snapshot.INTEREST_LEVELS, today=local_today())
 
 
 @bp.route("/snapshots/<int:snapshot_id>/delete", methods=["POST"])

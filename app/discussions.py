@@ -21,6 +21,7 @@ from .industry import TEMPLATES, template_payload
 from .market import MarketDataError
 from .models import Client, Discussion, DiscussionCompany, db
 from .routes import _create_client_from_form, _own_client, _parse_date, bp
+from .timeutil import local_today
 
 SNAPSHOT_VERSION = 1
 
@@ -105,7 +106,7 @@ def build_discussion(form):
 
     discussion = Discussion(
         rm_id=g.user.id, client=client, period=period,
-        discussed_on=_parse_date(form.get("discussed_on"), date.today()),
+        discussed_on=_parse_date(form.get("discussed_on"), local_today()),
         follow_up_on=_parse_date(form.get("follow_up_on")),
         client_interests=interests[:5000],
         notes=form.get("notes", "").strip()[:10000] or None,
