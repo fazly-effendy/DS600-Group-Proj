@@ -37,32 +37,40 @@ Group 1 project, extending the Nimbus case study. A relationship manager (RM) ca
 ```mermaid
 flowchart LR
     U[RM's browser] -->|HTTPS| CF[CloudFront]
+    CF -->|HTTP :80 + origin token| ALB
     subgraph VPC["Amazon VPC 10.0.0.0/16"]
-        subgraph PUB["Public subnet 10.0.1.0/24"]
-            EC2["EC2 · Amazon Linux 2023<br/>Nginx → Gunicorn → Flask"]
+        subgraph PUB["Public subnets 10.0.1.0/24 (AZ a) + 10.0.2.0/24 (AZ b)"]
+            ALB["Application Load Balancer<br/>forwards only with the origin token"]
+            subgraph ASG["Auto Scaling group: 1–3 servers"]
+                EC2a["EC2 · Nginx → Gunicorn → Flask"]
+                EC2b["EC2 (added under load)"]
+            end
         end
         subgraph PRIV["Private subnets 10.0.3.0/24 + 10.0.4.0/24"]
             RDS[("Amazon RDS<br/>MySQL")]
         end
-        EC2 -->|MySQL :3306<br/>allowed by DB security group| RDS
+        ALB --> EC2a
+        ALB -.-> EC2b
+        EC2a -->|MySQL :3306| RDS
+        EC2b -.->|MySQL :3306| RDS
     end
-    EIP["Elastic IP"] -.->|stable origin address| EC2
-    CF -->|HTTP :80 + origin token| EIP
-    EC2 -->|Internet egress| IGW[Internet Gateway]
-    EC2 -->|HTTPS| YF[Yahoo Finance]
-    IAM["Existing LabInstanceProfile"] -.-> EC2
+    CW["CloudWatch metrics<br/>CPU and requests per server"] -.->|target tracking| ASG
+    EC2a -->|Internet egress| IGW[Internet Gateway]
+    EC2a -->|HTTPS| YF[Yahoo Finance]
+    IAM["Existing LabInstanceProfile"] -.-> EC2a
 ```
 
 | AWS service | How Nimbus RM uses it |
 |---|---|
-| **Amazon CloudFront** | Public entry point with HTTPS from its default `cloudfront.net` certificate. Dynamic caching is disabled and session cookies/query parameters are forwarded. Nginx requires a secret origin header to deter direct-origin access. |
-| **Amazon VPC** | A VPC contains one public subnet for EC2 and two private subnets in separate Availability Zones for the RDS subnet group. The public subnet routes through an Internet Gateway; the private subnets have no internet route. Security groups permit HTTP to the web server and MySQL only from that server to RDS. |
-| **Amazon EC2 and EBS** | A small Amazon Linux 2023 instance runs Nginx and Gunicorn/Flask as a `systemd` service, with an encrypted 8 GiB `gp2` EBS root volume. It needs outbound internet access for installation and Yahoo Finance; a NAT gateway is avoided to reduce sandbox cost. |
-| **Elastic IP** | A stable public address is attached to EC2 and used as CloudFront's origin, so the origin address survives an instance stop/start. |
-| **Amazon RDS** | A 20 GiB, encrypted, single-AZ MySQL database in the private subnets holds users, clients and discussion snapshots. Its endpoint is not public and its security group accepts MySQL only from the EC2 security group. |
-| **Amazon S3** | A private, encrypted archive bucket stores snapshots with a `discussed_on` date older than five years; objects transition to Glacier Flexible Retrieval after 30 days. Glacier is an S3 storage class here, not a separately provisioned resource. |
-| **IAM** | The EC2 instance uses the sandbox's existing `LabInstanceProfile` for Systems Manager and, if permitted by its existing policies, S3 archive access. The sandbox does not allow creating IAM roles or policies. |
-| **AWS CloudFormation** | Creates and manages the infrastructure as a stack, making the sandbox deployment reproducible and removable. |
+| **Amazon CloudFront** | Public entry point with HTTPS from its default `cloudfront.net` certificate. Dynamic caching is disabled and session cookies/query parameters are forwarded. It adds a secret origin header to every request it sends to the load balancer. |
+| **Application Load Balancer** | Spreads requests across the healthy servers in two Availability Zones and checks each server's `/api/health` (app and database) every 15 seconds. Its listener refuses (403) any request without CloudFront's secret header, so the servers cannot be reached directly. |
+| **EC2 Auto Scaling** (Feature 6) | A launch template and an Auto Scaling group keep **1 to 3** servers running. Two **target-tracking** policies add a server when average CPU goes above 60% or requests per server go above the target, and remove servers when load falls. Unhealthy servers are replaced automatically. Changing the `GitCommit` parameter replaces the servers one at a time (rolling update) with no downtime and no data loss. |
+| **Amazon VPC** | Two public subnets (load balancer and servers) and two private subnets (database), each pair in two Availability Zones. Public subnets route through an Internet Gateway; private subnets have no internet route. Security groups: internet → load balancer on 80; load balancer → servers on 80; servers → RDS on 3306. Nothing else. |
+| **Amazon EC2 and EBS** | Each server runs Amazon Linux 2023 with Nginx and Gunicorn/Flask as a `systemd` service on an encrypted 8 GiB `gp2` root volume. Servers need outbound internet for installation and Yahoo Finance; a NAT gateway is avoided to reduce sandbox cost. The footer shows which server answered and which commit it runs. |
+| **Amazon RDS** | A 20 GiB, encrypted, single-AZ MySQL database in the private subnets holds users, clients, saved discussions (with their full snapshots) and stock notes. Because every saved discussion lives here, any server can reopen any discussion. Its endpoint is not public and its security group accepts MySQL only from the servers' security group. |
+| **Amazon S3** | A private, encrypted archive bucket stores stock notes with a `discussed_on` date older than five years; objects transition to Glacier Flexible Retrieval after 30 days. Every server has the monthly timer, but a database lock lets only one run it. |
+| **IAM** | The servers use the sandbox's existing `LabInstanceProfile` for Systems Manager and S3 archive access. The sandbox does not allow creating IAM roles or policies. |
+| **AWS CloudFormation** | Creates the whole environment as one stack from [`infra/nimbus-merged-stack.yaml`](infra/nimbus-merged-stack.yaml), so it can be rebuilt the same way every time. The stack only reports success after a server has installed the app and signalled that it is healthy. |
 
 The deployment is defined in [`infra/nimbus-merged-stack.yaml`](infra/nimbus-merged-stack.yaml). Its architecture, setup steps, resource rationales and limitations are documented in the [CloudFront sandbox guide](docs/CLOUDFRONT_SANDBOX.md), with the lab's full restrictions in [AWS Academy sandbox limitations](docs/AWS_ACADEMY_SANDBOX_LIMITATIONS.txt). Old discussion snapshots are archived monthly to a private S3 bucket and transitioned to Glacier Flexible Retrieval.
 
@@ -88,12 +96,11 @@ DS600-Group-Proj/
 │   ├── templates/         # Jinja2 HTML templates
 │   └── static/            # CSS and the comparison page's JavaScript (Chart.js)
 ├── infra/
-│   └── nimbus-merged-stack.yaml # CloudFront sandbox stack with S3 snapshot archive
+│   └── nimbus-merged-stack.yaml # CloudFront → load balancer → Auto Scaling group → RDS, plus S3 archive
 ├── deploy/
 │   ├── nginx-cloudfront.conf # Origin-token guard for the CloudFront deployment
 │   ├── nginx-public.conf    # Optional direct-origin Nginx config
 │   ├── setup_ec2.sh       # Installs and starts the app on EC2
-│   ├── update.sh          # Pulls new code from GitHub and restarts the app
 │   ├── nimbus.service     # systemd unit for Gunicorn
 │   ├── nimbus-archive.service # systemd service for snapshot archiving
 │   └── nimbus-archive.timer # Monthly archive schedule
@@ -145,19 +152,15 @@ python -m pytest -q                               # run the tests
 
 ## Deploy to AWS
 
-For the AWS Academy sandbox deployment with CloudFront, follow **[docs/CLOUDFRONT_SANDBOX.md](docs/CLOUDFRONT_SANDBOX.md)**. In short:
+For the full AWS Academy sandbox steps, follow **[docs/CLOUDFRONT_SANDBOX.md](docs/CLOUDFRONT_SANDBOX.md)**. In short:
 
-1. Push this repository to GitHub (public, so EC2 can clone it).
-2. In **us-east-1**, create a CloudFormation stack from `infra/nimbus-merged-stack.yaml` and enter the repository URL and generated secrets.
-3. Wait for CloudFront to report **Deployed**, then open the `ApplicationURL` stack output.
-4. Use Systems Manager Session Manager to seed the demo login on EC2.
+1. Make sure the commit you want to deploy is on GitHub (the repository must be public so the servers can clone it), and copy its hash: `git rev-parse HEAD`.
+2. In **us-east-1**, create a CloudFormation stack from `infra/nimbus-merged-stack.yaml`. Enter the repository URL, the **GitCommit** hash, and generated secrets.
+3. Wait for the stack to reach `CREATE_COMPLETE` (about 20–25 minutes, mostly the database and CloudFront), then open the `ApplicationURL` output. Register a login on the app's Register page.
 
-   ```bash
-   cd /opt/nimbus
-   sudo -u nimbus .venv/bin/flask --app wsgi seed-demo
-   ```
+**To deploy new code:** on the stack choose **Update → Use current template**, change only **GitCommit**, and submit. The Auto Scaling group starts a server with the new commit, waits for it to report healthy, then removes an old one. The site stays up and the database is untouched. The footer shows the new commit when it is done.
 
-To ship a code change: push to GitHub, then on the server run `sudo bash /opt/nimbus/deploy/update.sh`.
+**Do not delete the stack to redeploy:** deleting it deletes the database and every saved discussion.
 
 ---
 
@@ -187,9 +190,11 @@ This is also Gaurav's acceptance test, in order:
 
 ## Limitations and next steps
 
-- **HTTPS** — the app is served over HTTP. Next step: an Application Load Balancer with an AWS Certificate Manager certificate and a domain in Route 53.
+- **HTTPS** — CloudFront serves HTTPS with its default certificate; the hop from CloudFront to the load balancer is HTTP inside AWS, protected by the secret origin header. A custom domain with an AWS Certificate Manager certificate is not possible in the sandbox.
 - **Secrets** — the database password is passed as a CloudFormation parameter. In production it should come from AWS Secrets Manager.
-- **Availability** — one EC2 instance and a single-AZ database. Next step: an Auto Scaling group across both public subnets behind the load balancer, and RDS Multi-AZ.
+- **Availability** — the servers scale across two Availability Zones, but the database is single-AZ (the sandbox does not support RDS Multi-AZ) and is deleted with the stack.
+- **Scaling speed** — a new server takes about 6–9 minutes to install the app, and target tracking removes servers only after about 15 minutes of low load, so scaling is visible in minutes, not seconds.
+- **Per-server memory** — each server caches market data for 15 minutes in its own memory, so two servers may briefly fetch the same figures. Saved discussions are never affected: they live in RDS.
 - **Market data** — Yahoo Finance via `yfinance` is free but unofficial and may be delayed or rate-limited. A bank would use a licensed feed (Bloomberg, Refinitiv).
 - **News** — Yahoo's ticker news feed sometimes returns nothing; Nimbus then uses Yahoo search (only articles linked to the ticker that name the company) and Yahoo's RSS headline feed. RSS items have no publisher, and many search items have no summary; the page says so rather than writing one. In demo data mode no news or analyst ratings are shown at all.
 - Statement data covers the last 4–5 fiscal years; some companies (especially banks) don't report every line item, so some ratios show "—".

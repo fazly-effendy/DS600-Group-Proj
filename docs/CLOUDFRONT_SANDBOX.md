@@ -1,138 +1,99 @@
-# Nimbus RM on the AWS Academy sandbox with CloudFront
+# Nimbus RM on the AWS Academy sandbox
 
-This deployment uses CloudFormation to create the application network, EC2
-server, private RDS database, and CloudFront distribution. It targets the
-AWS Academy sandbox described in
-[`AWS_ACADEMY_SANDBOX_LIMITATIONS.txt`](AWS_ACADEMY_SANDBOX_LIMITATIONS.txt) and
-must be deployed in **us-east-1**.
+One CloudFormation stack, [`infra/nimbus-merged-stack.yaml`](../infra/nimbus-merged-stack.yaml), creates the network, a load balancer, an Auto Scaling group of application servers, the private RDS database and the CloudFront distribution. It targets the AWS Academy sandbox described in [`AWS_ACADEMY_SANDBOX_LIMITATIONS.txt`](AWS_ACADEMY_SANDBOX_LIMITATIONS.txt) and must be deployed in **us-east-1**.
 
 ## Architecture
 
 ```text
-Browser -- HTTPS --> CloudFront -- HTTP + origin token --> EC2 (Nginx/Gunicorn/Flask)
-                                                         |
-                                                         +--> private RDS MySQL
+Browser --HTTPS--> CloudFront --HTTP + origin token--> Application Load Balancer (2 AZs)
+                                                           | forwards only with the token
+                                                           v
+                                         Auto Scaling group: 1 to 3 EC2 servers
+                                         (Nginx -> Gunicorn -> Flask), 2 public subnets
+                                                           |
+                                                           v MySQL :3306
+                                         Amazon RDS MySQL, 2 private subnets (single-AZ)
 ```
 
-CloudFront provides HTTPS at its generated `*.cloudfront.net` hostname, so the
-deployment does not need a registered domain, Route 53, or a customer-managed
-TLS certificate. The Flask application and database remain the existing app;
-CloudFront is the public entry point and EC2 is its origin.
+CloudFront provides HTTPS at its generated `*.cloudfront.net` hostname, so no domain, Route 53 or custom certificate is needed. Scaling follows the course's Lab 6 pattern: launch template, Auto Scaling group across two Availability Zones behind an Application Load Balancer, and target-tracking policies on CloudWatch metrics.
 
-## Deploy
+## Deploy (first time)
 
-1. Start the lab and check that the Region is **us-east-1**. Push the application
-   to a public GitHub repository so the EC2 bootstrap script can clone it.
-2. Generate three independent random values locally (do not commit the values):
+1. Start the lab and check that the Region is **us-east-1**.
+2. Make sure the commit you want is pushed to the public GitHub repository, and copy its hash (`git rev-parse HEAD`, or the commit link on GitHub).
+3. Generate three random values on your own computer (never commit them):
 
    ```bash
    python3 -c "import secrets; print('AppSecretKey=' + secrets.token_hex(32)); print('OriginVerifyToken=' + secrets.token_hex(32)); print('DBPassword=' + secrets.token_hex(20))"
    ```
 
-   Enter each value in its matching parameter. The 40-character database
-   password stays within RDS's 41-character maximum and uses allowed characters.
-3. In CloudFormation, create a stack using
-   `infra/nimbus-merged-stack.yaml`.
-4. Provide the public repository URL, branch, generated secrets, and an allowed
-   instance size. Keep the `t3.micro` defaults unless the lab requires otherwise.
-   Set `SSHAllowedCidr` to your own public IP with `/32` if SSH is needed;
-   otherwise keep its default and connect through Systems Manager Session
-   Manager using the pre-created `LabInstanceProfile`.
-5. Wait for the stack to complete and the CloudFront distribution status to
-   become **Deployed**. Open the `ApplicationURL` output. The first boot installs
-   Python packages and may take several minutes. EC2 bootstrap waits until the
-   public subnet's internet route is associated before downloading the app and
-   dependencies.
-6. Create a demo login with Session Manager:
+4. **CloudFormation → Create stack → Upload a template file** → `infra/nimbus-merged-stack.yaml`. Stack name: `nimbus`.
+5. Parameters:
+   - **RepositoryUrl**: the public repository URL, e.g. `https://github.com/pujoglekar2026/DS600-Group-Proj`.
+   - **GitCommit**: the hash from step 2.
+   - **AppSecretKey**, **OriginVerifyToken**, **DBPassword**: the values from step 3.
+   - Leave the rest at their defaults (`t3.micro`, CPU target 60%, 300 requests per server per minute). Leave **KeyName** empty and use Session Manager unless you need SSH.
+6. Submit and wait for `CREATE_COMPLETE` (about 20–25 minutes; RDS and CloudFront take the longest). The stack completes only after a server has installed the app and signalled that it is healthy.
+7. Open the **ApplicationURL** output. If Chrome warns, check the address starts with `https://`. Register a login on the Register page (or seed demo data with Session Manager: `cd /opt/nimbus && sudo -u nimbus .venv/bin/flask --app wsgi seed-demo`).
+8. The page footer shows **Server i-… · commit …**: which server answered and which commit it runs.
+
+## Deploy new code (rolling update)
+
+**Update stack → Use current template** → change only **GitCommit** → submit.
+
+The launch template gets a new version, and the Auto Scaling group replaces the servers **one at a time**: it starts a server with the new commit, waits for its success signal, then removes an old one. The load balancer keeps sending traffic to healthy servers throughout, and the database is not touched. When the update completes, the footer shows the new commit.
+
+**Never delete the stack to redeploy:** RDS has `DeletionPolicy: Delete`, so deleting the stack deletes every saved discussion.
+
+## Recording the Feature 6 scaling evidence
+
+The instructor accepts recorded evidence kept in the repository (decision D-02). Save everything in `docs/evidence/<date>-scaling/`, with a `README.md` naming the stack's **DeployedCommit** output.
+
+1. **Before:** screenshot **EC2 → Auto Scaling groups → (AutoScalingGroupName output)**: *Desired 1, Min 1, Max 3*, and the **Automatic scaling** tab showing both target-tracking policies.
+2. **Save a discussion** in the app (Compare two companies → Save this discussion) and note the footer's server ID.
+3. **Generate load** from **CloudShell** (top bar of the console), replacing the URL with your ApplicationURL:
 
    ```bash
-   cd /opt/nimbus
-   sudo -u nimbus .venv/bin/flask --app wsgi seed-demo
+   URL=https://dxxxxxxxxxxxx.cloudfront.net/login
+   for i in $(seq 1 20); do
+     ( end=$((SECONDS+900)); while [ $SECONDS -lt $end ]; do curl -s -o /dev/null "$URL"; done ) &
+   done; wait
    ```
 
-   Then log in to the CloudFront URL with `demo / demo12345`.
+   This sends roughly 20–40 requests per second for 15 minutes, well above the 300 requests per server per minute target.
+4. **Scale-out:** within about 3–5 minutes the request alarm goes into *In alarm* (CloudWatch → Alarms, names start with `TargetTracking-`). The group's **Activity** tab shows *Launching a new EC2 instance*, and **Instance management** shows 2–3 instances. **Target groups → Targets** shows them becoming *healthy* (6–9 minutes each). Screenshot each.
+5. **Any server reopens any discussion:** while two or more servers are healthy, open **Discussions → Open** on the saved discussion and reload a few times. The footer's server ID changes while the record stays identical. Screenshot two different server IDs with the same record.
+6. **Scale-in:** stop the load (Ctrl+C, or let it finish). About 15 minutes later the low-load alarm fires and the Activity tab shows *Terminating EC2 instance*, back to 1. Screenshot it.
+7. Copy the Activity history text into the evidence README. Any change you make by hand to *Desired capacity* must be labelled **manual**, separately from this automatic test.
 
 ## Why these resources and settings
 
 | Resource or setting | Reason |
 |---|---|
-| CloudFormation | Reproducible setup and teardown of the resources the sandbox permits; fewer manual configuration errors. |
-| CloudFront distribution | Required public edge endpoint; gives browser-to-app HTTPS using the default CloudFront certificate without a custom domain or ACM certificate. |
-| CloudFront caching disabled | This app serves personalized pages and session cookies and uses query parameters for filtering. Forwarding cookies and query strings while disabling caching avoids serving one user's content to another or returning stale pages. Static-file caching can be added later as a separate behavior with deliberate cache invalidation. |
-| CloudFront origin verification header | Nginx rejects direct requests to the public EC2 origin unless they carry the secret header CloudFront adds. This mitigates bypassing the distribution, although it is not equivalent to a private origin. |
-| EC2 in a public subnet | The app needs outbound internet access during setup to clone the public repository and install dependencies. A public subnet plus Internet Gateway avoids a NAT gateway and its cost. |
-| Existing `LabInstanceProfile` | IAM is read-only in the sandbox, so the template does not attempt to create a role. The pre-created profile supports Session Manager access. |
-| RDS MySQL in private subnets | Persists app users, clients, and discussion snapshots without a public database endpoint. Its security group permits MySQL only from the EC2 security group. |
-| Two private subnets, single-AZ RDS | RDS subnet groups require subnets in at least two Availability Zones. The database itself remains single-AZ because the lab disallows Multi-AZ deployments. |
-| Small burstable instances and gp2 | These stay within the sandbox's EC2, RDS, EBS type, and storage limits; `t3.micro` and 20 GiB gp2 are the starting defaults. |
-| CloudFront `PriceClass_100` | Reduces distribution cost by using the lower-cost edge locations. Requests from Asia can have higher latency than with `PriceClass_All`. |
-
-The app is server-rendered Flask, so S3 static-site hosting alone cannot serve
-its authenticated pages or API. A static-site bucket would add deployment and
-asset synchronization work without removing the need for the EC2 application
-server. The stack does create a separate private S3 bucket solely for old
-discussion-snapshot archives.
-A load balancer and Auto Scaling group are also omitted: there is one small
-origin in this temporary lab, and adding another compute tier would increase
-cost and setup complexity without providing meaningful availability.
+| CloudFormation | Reproducible setup, rolling code updates and teardown of everything the sandbox permits. |
+| CloudFront, caching disabled | Public HTTPS endpoint with the default certificate. Pages are personalised and use session cookies and query parameters, so nothing is cached and cookies and query strings are forwarded. |
+| Origin verification header | CloudFront adds a secret header; the load balancer's listener forwards only requests carrying it (others get 403), and Nginx checks it again. Only `/api/health` is open on the servers, because load balancer health checks cannot add headers; it reveals only whether the app and database are up. |
+| Application Load Balancer, two public subnets | Spreads requests across servers in two Availability Zones and removes unhealthy servers from service (health check every 15 s on `/api/health`, which also checks the database). A load balancer must span at least two AZs. |
+| Launch template + Auto Scaling group, 1–3 servers | Feature 6: capacity grows and shrinks with demand. Maximum 3 stays within the sandbox's instance limits; minimum 1 keeps the app always available. Servers are replaced automatically if they fail the health check. |
+| Two target-tracking policies | CPU 60% (the Lab 6 metric) catches heavy work such as many comparisons; requests per server catches many light requests. The group scales out if either is above target and scales in only when both are below. |
+| Rolling update on `GitCommit` | Deploys an exact, recorded commit. One server at a time, each must signal success first, so updates cause no downtime and keep the database. |
+| No sticky sessions | Logins are signed cookies and saved discussions are in RDS, so any server can answer any request. |
+| Servers in public subnets, no NAT gateway | Servers need outbound internet to clone the repository, install packages and call Yahoo Finance. A public subnet with an Internet Gateway avoids NAT gateway cost. Their security group accepts HTTP only from the load balancer. |
+| Existing `LabInstanceProfile` | IAM is read-only in the sandbox, so the template cannot create a role. The profile allows Session Manager access and S3 for the archive. |
+| RDS MySQL in private subnets, single-AZ | No public endpoint; MySQL is accepted only from the servers' security group. The subnet group needs two AZs, but the sandbox does not allow Multi-AZ databases. |
+| Connection limits per server | Each Gunicorn worker keeps at most 3 + 2 MySQL connections: 3 workers × 3 servers stays inside a `db.t3.micro`'s limit. |
+| Archive lock | Every server has the monthly archive timer; a MySQL named lock lets only one of them run it. |
+| `t3.micro`, gp2, `PriceClass_100` | Within sandbox limits (Auto Scaling groups may use t2/t3 nano to small) and low cost. |
 
 ## Considerations and limitations
 
-- **Region and service quotas:** Deploy in `us-east-1`. The stack creates an EC2
-  instance and RDS database, both consuming lab resources. The template avoids
-  creating IAM roles and does not use a NAT gateway, load balancer, Elastic IP,
-  or Multi-AZ database.
-- **Session cleanup and data loss:** The sandbox resets resources when its timer
-  expires. RDS uses `DeletionPolicy: Delete`, so deleting the stack also deletes
-  the database. The snapshot archive bucket is retained when the stack is
-  deleted; remove its contents and bucket manually when they are no longer
-  needed. Export any required project data before ending the lab; this is not a
-  durable production hosting arrangement.
-- **Snapshot archive:** A monthly EC2 systemd timer moves snapshots whose
-  `discussed_on` date is more than five calendar years old from RDS to private,
-  SSE-S3-encrypted S3 objects. The job verifies each object before deleting the
-  database row. S3 transitions the archive objects to Glacier Flexible
-  Retrieval after 30 days. Archived snapshots are not available in the app;
-  retrieval requires restoring the object from Glacier. The archive contains
-  client names and discussion notes, so protect access to the bucket. To run
-  the archive immediately, use Session Manager and run
-  `sudo -u nimbus /opt/nimbus/.venv/bin/flask --app wsgi archive-snapshots`.
-  The lifecycle rule does not expire archive objects, so they remain in Glacier
-  and continue to incur storage charges until manually deleted.
-  This is based on discussion date, not last access, and five years is a
-  project default rather than a compliance recommendation. Archiving reduces
-  live database rows and future growth; it does not shrink the provisioned
-  20-GiB RDS storage allocation or immediately reduce its storage charge.
-- **Archive IAM permissions:** IAM is read-only in the lab, so the stack cannot
-  create a scoped policy. The archiver uses the existing `LabInstanceProfile`.
-  Confirm that it permits `s3:PutObject` and `s3:GetObject` for the archive
-  bucket; otherwise the job will fail without deleting the RDS row.
-- **Origin networking:** EC2 must accept port 80 because CloudFront connects to
-  it over HTTP. Nginx validates the CloudFront-only secret header, but the EC2
-  origin still has a public address and the header can be read by principals
-  with permission to inspect the distribution or instance bootstrap data.
-  Restrict SSH to a single admin IP or use Session Manager. Do not reuse the
-  origin token or application/database secrets elsewhere.
-- **Secrets:** CloudFormation `NoEcho` hides parameter values in most stack
-  displays, but bootstrap configuration and instance metadata are not a
-  production-grade secrets store. Use generated secrets, never commit them, and
-  delete the stack after the lab.
-- **CloudFront deployment delay:** Distribution creation and changes can take
-  several minutes. A newly created stack can be complete before CloudFront is
-  globally deployed; wait for the distribution status before testing.
-- **Origin address:** The stack associates an Elastic IP with EC2 so the
-  CloudFront origin remains stable across stop/start. If the EC2 instance or
-  Elastic IP is replaced, let CloudFormation update the distribution and wait
-  for CloudFront to report **Deployed** before testing.
-- **Market data:** Yahoo Finance may rate-limit or block cloud-hosted requests.
-  The app labels its demo-data fallback; these figures are illustrative, not
-  investment advice.
-- **Production gap:** This design is for a temporary educational sandbox, not
-  production. A production system should use private compute-to-origin
-  connectivity, managed secrets, HTTPS from CloudFront to the origin, stronger
-  monitoring, backup/recovery planning, and high availability.
+- **Timing:** a new server needs about 6–9 minutes to install the app, and target tracking waits about 15 minutes of low load before removing servers. Record the scaling test in advance rather than live.
+- **Session cleanup and data loss:** the sandbox stops resources when its timer expires. Deleting the stack deletes the database. The snapshot archive bucket is retained; delete it manually when no longer needed.
+- **Snapshot archive:** a monthly timer moves stock notes whose `discussed_on` date is more than five years old from RDS to private, SSE-S3-encrypted S3 objects, verifying each object before deleting the row; S3 moves them to Glacier Flexible Retrieval after 30 days. Run it now with Session Manager: `sudo -u nimbus /opt/nimbus/.venv/bin/flask --app wsgi archive-snapshots`. Confirm `LabInstanceProfile` allows `s3:PutObject` and `s3:GetObject` on the bucket; otherwise the job fails without deleting anything.
+- **Secrets:** CloudFormation `NoEcho` hides parameter values in most displays, but the values are in the launch template's user data, readable by anyone with console access to it. Use generated secrets, never commit them, and delete the stack after the course.
+- **Per-server cache:** each server caches market data for 15 minutes in its own memory, so two servers may each fetch the same figures once. Saved discussions are unaffected: they are read from RDS.
+- **CloudFront delay:** distribution creation and updates take several minutes; wait for **Deployed** before testing.
+- **Market data:** Yahoo Finance may rate-limit cloud servers. Nimbus never saves demo data into a client record and labels it wherever it is shown.
+- **Production gap:** a production system would use private subnets with a NAT gateway or VPC endpoints for the servers, HTTPS between CloudFront and the load balancer, managed secrets, Multi-AZ RDS with backups, and alarms that notify people.
 
-To clean up, delete the CloudFormation stack when finished and wait until the
-stack deletion completes. This removes the CloudFront distribution and its
-origin resources but retains the non-empty snapshot archive bucket; delete that
-bucket separately only after confirming its contents are no longer needed.
+To clean up, delete the CloudFormation stack and wait until deletion completes. This removes CloudFront, the load balancer, the servers and the database, but keeps the archive bucket.

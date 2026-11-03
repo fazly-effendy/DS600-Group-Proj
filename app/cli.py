@@ -31,9 +31,14 @@ def register_cli(app):
 
         from .archive import archive_snapshots
 
+        from .archive import ARCHIVE_LOCK, run_exclusively
+
         client = boto3.client("s3")
-        count = archive_snapshots(bucket, client, years=years)
-        click.echo(f"Archived and removed {count} discussion snapshot(s).")
+        count = run_exclusively(ARCHIVE_LOCK, lambda: archive_snapshots(bucket, client, years=years))
+        if count is None:
+            click.echo("Another server is already archiving; skipped.")
+        else:
+            click.echo(f"Archived and removed {count} discussion snapshot(s).")
 
     @app.cli.command("create-user")
     @click.argument("username")

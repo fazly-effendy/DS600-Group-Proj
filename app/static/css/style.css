@@ -285,3 +285,4 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .clip { max-width: 28rem; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .record { grid-template-columns: 1fr; } .record dd { margin-bottom: .5rem; } }
+.footer .server-id { margin-top: .25rem; font-family: var(--mono, monospace); font-size: .75rem; }

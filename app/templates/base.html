@@ -42,7 +42,8 @@
   {% block content %}{% endblock %}
 </main>
 
-<footer class="footer">Nimbus RM · Market data from Yahoo Finance (may be delayed) · For internal discussion only, not investment advice.</footer>
+<footer class="footer">Nimbus RM · Market data from Yahoo Finance (may be delayed) · For internal discussion only, not investment advice.
+  {% if config.NIMBUS_INSTANCE_ID %}<div class="server-id">Server {{ config.NIMBUS_INSTANCE_ID }}{% if config.NIMBUS_COMMIT %} · commit {{ config.NIMBUS_COMMIT[:7] }}{% endif %}</div>{% endif %}</footer>
 {% block scripts %}{% endblock %}
 </body>
 </html>

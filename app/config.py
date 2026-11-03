@@ -38,8 +38,12 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-me")
     SQLALCHEMY_DATABASE_URI = build_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    # Recycle connections so RDS idle timeouts don't break requests.
-    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280}
+    # Recycle connections so RDS idle timeouts don't break requests. On MySQL each
+    # Gunicorn worker keeps at most 3 + 2 connections, so 3 workers x 3 servers
+    # stay well inside what a small RDS instance accepts.
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280,
+                                 **({"pool_size": 3, "max_overflow": 2}
+                                    if SQLALCHEMY_DATABASE_URI.startswith("mysql") else {})}
 
     MARKET_DATA_PROVIDER = os.getenv("MARKET_DATA_PROVIDER", "yahoo").lower()
     DEMO_FALLBACK = _bool("DEMO_FALLBACK", DEMO_FALLBACK_DEFAULT)
@@ -50,6 +54,11 @@ class Config:
     SESSION_COOKIE_SECURE = _bool("SESSION_COOKIE_SECURE", False)
     SESSION_COOKIE_SAMESITE = "Lax"
     MAX_COMPARE_TICKERS = 5
+
+    # Set by the CloudFormation user data; shown in the footer so you can tell which
+    # server answered and which commit it runs (empty when running locally).
+    NIMBUS_COMMIT = os.getenv("NIMBUS_COMMIT", "")
+    NIMBUS_INSTANCE_ID = os.getenv("NIMBUS_INSTANCE_ID", "")
 
 
 class TestConfig(Config):

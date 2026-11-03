@@ -5,6 +5,36 @@ from datetime import date
 
 from .models import Snapshot, db
 
+ARCHIVE_LOCK = "nimbus-archive"
+
+
+def _acquire_lock(name):
+    """MySQL named lock, so only one server runs the archive at a time.
+
+    Every server in the Auto Scaling group has the monthly timer; the first to get
+    the lock runs the job and the others skip it. SQLite (local) has one process,
+    so no lock is needed there.
+    """
+    if db.engine.dialect.name != "mysql":
+        return True
+    got = db.session.execute(db.text("SELECT GET_LOCK(:name, 0)"), {"name": name}).scalar()
+    return got == 1
+
+
+def _release_lock(name):
+    if db.engine.dialect.name == "mysql":
+        db.session.execute(db.text("SELECT RELEASE_LOCK(:name)"), {"name": name})
+
+
+def run_exclusively(name, job):
+    """Run job() only if this server gets the lock; return its result, or None if skipped."""
+    if not _acquire_lock(name):
+        return None
+    try:
+        return job()
+    finally:
+        _release_lock(name)
+
 
 def _snapshot_payload(snapshot):
     return {
