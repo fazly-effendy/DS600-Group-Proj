@@ -16,8 +16,9 @@ Group 1 project, extending the Nimbus case study. A relationship manager (RM) ca
 |---|---|---|
 | **One-screen company briefing** | For each company on the Compare page: key financials for the latest fiscal year (revenue, net income, total debt, equity in M/B), a fixed core row of revenue growth, net margin and debt-to-equity (flagged as not meaningful for banks), Yahoo Finance analyst ratings and price targets, and recent news with publisher, date, link and the source's own summary ("No summary provided by the source" when there is none) | Lesson 4, Feature 1 |
 | **Compare companies** | Pick 2–5 tickers and see their price performance on one chart, rebased to 100 or in actual prices, over 1 month to 5 years | Lesson 4, Feature 2 |
-| **Record discussion snapshots** | Save client ID, ticker, date, stock price at the time of discussion (fetched automatically), interest level, topic tags and notes | Lesson 4, Features 3 & 4 |
-| **Retrieve records** | Find past discussions by client or by company, search notes, filter by date or interest, export to CSV | Stored in Amazon RDS |
+| **Save a client discussion** | One **Save** on the Compare page stores the whole comparison for a client: every company's price at the time of discussion (with its date and source), revenue growth, net margin, debt-to-equity, the financials, ratings and news shown, plus the client's interests (required), notes and a follow-up date. Demo data is never saved as a client record | Lesson 4, Features 3 & 4 |
+| **Search and reopen discussions** | **Discussions** page: search by client, by company (ticker or name) and by date, with SQL on the `discussions` and `discussion_companies` tables. **Open** shows the discussion read-only, exactly as saved, marked as a historical snapshot; it never fetches new market data | Lesson 4, Feature 5; stored in Amazon RDS |
+| **Stock notes** | A quicker record about one stock for a client (price then, interest level, tags, notes), with a "since discussion" price change, filters and CSV export | Extra |
 
 ### Advanced features
 
@@ -74,11 +75,12 @@ DS600-Group-Proj/
 ├── app/
 │   ├── __init__.py        # App factory, CSRF protection, template filters
 │   ├── config.py          # Settings from environment variables (.env)
-│   ├── models.py          # Database tables: users, clients, snapshots
+│   ├── models.py          # Database tables: users, clients, discussions, discussion_companies, snapshots
 │   ├── market.py          # Market data (Yahoo + demo), caching, analytics
 │   ├── news.py            # News (ticker feed, search + RSS fallback, relevance filter) and analyst ratings
 │   ├── industry.py        # Industry comparison templates and metric definitions
 │   ├── api.py             # JSON API used by the comparison page
+│   ├── discussions.py     # Save, search and reopen client discussions (Features 3–5)
 │   ├── routes.py          # HTML pages: dashboard, clients, discussions
 │   ├── auth.py            # Login, registration, logout
 │   ├── cli.py             # flask init-db / create-user / seed-demo / archive-snapshots
@@ -161,9 +163,13 @@ To ship a code change: push to GitHub, then on the server run `sudo bash /opt/ni
 
 ## Using the app
 
-1. **Compare** — enter tickers such as `D05.SI, O39.SI, U11.SI` (Singapore stocks end in `.SI`) or click a preset. Switch the chart between *Rebased to 100* and *Actual price*, then scroll to the summary, correlation matrix, and the ratio charts. Change the **Industry template** to see different metrics.
-2. **Save** — click *Save D05.SI @ 24.90* at the bottom of the comparison, pick or create a client, add notes, tags and a follow-up date.
-3. **Retrieve** — open **Clients** to see a client's full history with the price change since each discussion, or **Discussions** to filter across all clients by company, interest, date or keywords, and export to CSV.
+This is also Gaurav's acceptance test, in order:
+
+1. **Compare** — enter two or more tickers such as `AAPL, MSFT` or `D05.SI, O39.SI, U11.SI` (Singapore stocks end in `.SI`), or click a preset. You see price performance side by side (rebased to 100 or actual prices), then **Financials, ratings & news**: revenue growth, net margin and debt-to-equity, analyst ratings, and news with its source. Open **Financial ratios & trends** for year-by-year charts and industry templates.
+2. **Save** — at the bottom, under **Save this discussion**, choose a client (or add a new one with its client ID), set the discussion date, enter the **client interests** (required) and any notes or follow-up date, and click **Save discussion**. The whole comparison is stored.
+3. **Search** — open **Discussions** and search by client, by company (ticker such as `MSFT`, or a name such as `apple`) or by date. A client's page also lists their saved discussions.
+4. **Reopen** — click **Open**. The page shows the discussion exactly as saved (prices, ratios, financials, ratings and news), marked *Historical snapshot*. Nothing is fetched again; use *Compare again with today's data* to see current figures.
+5. **Stock notes** (optional) — a quick record about a single stock, with the price change since that discussion, filters and CSV export.
 
 | Dashboard | Client history |
 |---|---|

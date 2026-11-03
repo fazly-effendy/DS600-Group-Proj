@@ -1,8 +1,15 @@
-/* Comparison page: price chart, summary, correlation, fundamentals by industry template. */
+/* Comparison page: price chart, summary, correlation, fundamentals by industry template.
+ *
+ * Also used, read-only, by a reopened saved discussion: when the page contains
+ * <script id="saved-discussion">, everything is drawn from that saved snapshot and
+ * no market-data request is made.
+ */
 (() => {
   const COLORS = ['#1f6feb', '#e8590c', '#2b8a3e', '#ae3ec9', '#c92a2a'];
   const $ = (id) => document.getElementById(id);
   const form = $('compare-form');
+  const savedEl = $('saved-discussion');
+  const SAVED = savedEl ? JSON.parse(savedEl.textContent) : null;
   const state = { data: null, mode: 'rebased', charts: [], fundamentalsLoaded: false };
 
   // ---------- formatting ----------
@@ -44,7 +51,7 @@
   // ---------- company-name autocomplete ----------
   const tickerInput = $('tickers');
   const suggestionBox = $('company-suggestions');
-  const companyDirectory = window.NIMBUS.companyDirectory || [];
+  const companyDirectory = (window.NIMBUS && window.NIMBUS.companyDirectory) || [];
   let activeSuggestion = -1;
 
   function currentCompanyTerm() {
@@ -52,6 +59,7 @@
   }
 
   function closeSuggestions() {
+    if (!suggestionBox) return;
     suggestionBox.hidden = true;
     suggestionBox.innerHTML = '';
     activeSuggestion = -1;
@@ -108,10 +116,10 @@
     activeSuggestion = -1;
   }
 
-  tickerInput.addEventListener('input', renderCompanySuggestions);
-  tickerInput.addEventListener('focus', renderCompanySuggestions);
-  tickerInput.addEventListener('blur', () => setTimeout(closeSuggestions, 120));
-  tickerInput.addEventListener('keydown', (event) => {
+  if (tickerInput) tickerInput.addEventListener('input', renderCompanySuggestions);
+  if (tickerInput) tickerInput.addEventListener('focus', renderCompanySuggestions);
+  if (tickerInput) tickerInput.addEventListener('blur', () => setTimeout(closeSuggestions, 120));
+  if (tickerInput) tickerInput.addEventListener('keydown', (event) => {
     if (suggestionBox.hidden) return;
     const buttons = suggestionBox.querySelectorAll('.company-suggestion');
     if (event.key === 'ArrowDown') { event.preventDefault(); setActiveSuggestion(activeSuggestion + 1); }
@@ -298,7 +306,7 @@
     status.textContent = 'Loading financials, analyst ratings and news…';
     ['financials-table', 'ratings-table', 'news-list'].forEach((id) => { $(id).innerHTML = ''; });
     try {
-      const d = await getJSON(`/api/briefing?tickers=${encodeURIComponent(tickers)}`);
+      const d = SAVED ? SAVED.briefing : await getJSON(`/api/briefing?tickers=${encodeURIComponent(tickers)}`);
       if (d.demo_data) $('demo-banner').hidden = false;
       renderFinancials(d.companies);
       renderRatings(d.companies);
@@ -333,7 +341,7 @@
     $('trend-charts').innerHTML = '';
     $('valuation-table').innerHTML = '';
     try {
-      const d = await getJSON(`/api/fundamentals?tickers=${encodeURIComponent(tickers)}&template=${tpl}`);
+      const d = SAVED ? savedFundamentals(tpl) : await getJSON(`/api/fundamentals?tickers=${encodeURIComponent(tickers)}&template=${tpl}`);
       if (d.demo_data) $('demo-banner').hidden = false;
       $('template-desc').textContent = d.template.description;
       renderValuation(d);
@@ -342,6 +350,18 @@
     } catch (e) {
       $('template-desc').textContent = e.message;
     }
+  }
+
+  // Saved discussion: rebuild the fundamentals view from the saved yearly rows and
+  // the saved quote figures, for any template, without asking the server.
+  function savedFundamentals(key) {
+    const template = (window.NIMBUS.templates || []).find((t) => t.key === key) || window.NIMBUS.templates[0];
+    const companies = SAVED.compare.companies.map((c) => ({
+      ticker: c.ticker, name: c.name, currency: c.currency,
+      snapshot: Object.fromEntries(template.metrics.filter((m) => m.source === 'snapshot').map((m) => [m.key, c[m.key] ?? null])),
+      trend: (SAVED.trends || {})[c.ticker] || [],
+    }));
+    return { template, companies, demo_data: SAVED.data_source === 'demo' };
   }
 
   function renderValuation(d) {
@@ -385,6 +405,7 @@
 
   // ---------- 5. save buttons ----------
   function renderSaveButtons() {
+    if (!$('save-buttons')) return;
     $('save-buttons').innerHTML = state.data.companies.map((c) => {
       // No price in the link: the server fetches the live price when the RM saves.
       const url = `${window.NIMBUS.newSnapshotUrl}?ticker=${encodeURIComponent(c.ticker)}`;
@@ -410,6 +431,9 @@
       $('valuation-table').innerHTML = '';
       $('template-desc').textContent = 'Open this section to load financial statements.';
       history.replaceState(null, '', `?tickers=${encodeURIComponent(d.companies.map((c) => c.ticker).join(','))}&period=${encodeURIComponent(period)}`);
+      // The Save form saves exactly the companies and period on screen.
+      $('save-tickers').value = d.companies.map((c) => c.ticker).join(',');
+      $('save-period').value = period;
       $('results').hidden = false;
       $('demo-banner').hidden = !d.demo_data;
       $('template-select').value = d.suggested_template;
@@ -427,6 +451,34 @@
     } finally {
       form.querySelector('button[type="submit"], button:not([type])').disabled = false;
     }
+  }
+
+  // ---------- saved discussion: draw everything from the snapshot ----------
+  function showSaved() {
+    state.data = SAVED.compare;
+    $('demo-banner').hidden = SAVED.data_source !== 'demo';
+    $('template-select').value = SAVED.compare.suggested_template || 'general';
+    const tickers = SAVED.compare.companies.map((c) => c.ticker).join(',');
+    loadBriefing(tickers);
+    renderOverview();
+    renderSummary();
+    renderCorrelation();
+    try { renderPriceChart(); } catch (e) { setStatus('The price chart could not be drawn: ' + e.message, true); }
+  }
+
+  if (SAVED) { showSaved(); return; }
+
+  // ---------- Save form ----------
+  const clientSelect = $('client-select');
+  if (clientSelect) {
+    const syncClient = () => { $('new-client').hidden = clientSelect.value !== '__new__'; };
+    clientSelect.addEventListener('change', syncClient);
+    syncClient();
+    // One click = one record: stop a double click from saving twice.
+    $('save-form').addEventListener('submit', () => {
+      $('save-button').disabled = true;
+      $('save-button').textContent = 'Saving…';
+    });
   }
 
   form.addEventListener('submit', (e) => { e.preventDefault(); run(); });

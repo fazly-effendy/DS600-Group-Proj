@@ -271,3 +271,17 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .news-items { list-style: none; margin: .5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .85rem; }
 .news-headline { font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .news-summary { margin: .3rem 0 0; font-size: .88rem; line-height: 1.45; }
+
+/* Features 3–5: saving and reopening a whole discussion. */
+.save-form { gap: 1rem; }
+.form-actions.align-end { align-items: flex-end; }
+.single-notes { margin-top: 1rem; }
+.single-notes summary { cursor: pointer; }
+.single-notes .chips { margin-top: .5rem; }
+.historical-banner { border-left: 4px solid var(--accent); }
+.record { display: grid; grid-template-columns: max-content 1fr; gap: .4rem 1.25rem; margin: 0 0 1rem; }
+.record dt { color: var(--muted); font-size: .85rem; }
+.record dd { margin: 0; }
+.prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.clip { max-width: 28rem; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .record { grid-template-columns: 1fr; } .record dd { margin-bottom: .5rem; } }

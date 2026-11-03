@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Discussion with {{ d.client.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="crumb"><a href="{{ url_for('main.discussions') }}">Discussions</a> /</p>
+    <h1>{{ d.client.name }} · {{ d.discussed_on.strftime('%d %b %Y') }}</h1>
+    <p class="muted"><a class="mono" href="{{ url_for('main.client_detail', client_id=d.client_id) }}">{{ d.client.client_code }}</a>
+      · {{ d.companies | map(attribute='ticker') | join(', ') }} · period {{ d.period }}</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('main.compare', tickers=d.companies | map(attribute='ticker') | join(','), period=d.period) }}">Compare again with today's data</a>
+  </div>
+</div>
+
+<div class="flash info historical-banner" role="note">
+  <b>Historical snapshot.</b> Everything on this page is exactly as saved on
+  {{ d.created_at.strftime('%d %b %Y, %H:%M') }} UTC{% if d.data_retrieved_at %} (market data retrieved {{ d.data_retrieved_at.strftime('%d %b %Y, %H:%M') }} UTC){% endif %}.
+  It is not refreshed. Source: <span class="source {{ 'demo' if d.is_demo }}">{{ d.source_label }}</span>.
+</div>
+
+<section class="card">
+  <h2>Discussion record</h2>
+  <dl class="record">
+    <dt>Client</dt><dd>{{ d.client.label }}</dd>
+    <dt>Discussion date</dt><dd>{{ d.discussed_on.strftime('%d %b %Y') }}</dd>
+    <dt>Client interests</dt><dd class="prewrap">{{ d.client_interests }}</dd>
+    {% if d.notes %}<dt>Notes</dt><dd class="prewrap">{{ d.notes }}</dd>{% endif %}
+    {% if d.follow_up_on %}<dt>Follow up on</dt><dd>{{ d.follow_up_on.strftime('%d %b %Y') }}</dd>{% endif %}
+    <dt>Saved</dt><dd>{{ d.created_at.strftime('%d %b %Y, %H:%M') }} UTC</dd>
+  </dl>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Company</th><th class="num">Price at discussion</th><th>Price date</th>
+        <th class="num">Revenue growth</th><th class="num">Net margin</th><th class="num">Debt-to-equity</th><th>Fiscal year</th></tr></thead>
+      <tbody>
+      {% for c in d.companies %}
+        <tr>
+          <td><b>{{ c.company_name or c.ticker }}</b><div class="muted small">{{ c.ticker }}</div></td>
+          <td class="num mono">{% if c.stock_price is not none %}{{ c.currency }} {{ c.stock_price|money }}{% else %}—{% endif %}
+            <div class="source small {{ 'demo' if c.price_source == 'demo' }}">{{ c.price_source_label }}</div></td>
+          <td>{{ c.price_date.strftime('%d %b %Y') if c.price_date else '—' }}</td>
+          <td class="num">{{ c.revenue_growth|pct(signed=True) }}</td>
+          <td class="num">{{ c.net_margin|pct }}</td>
+          <td class="num">{{ '%.2f×'|format(c.debt_to_equity) if c.debt_to_equity is not none else '—' }}</td>
+          <td>{{ c.fiscal_year or '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <form method="post" action="{{ url_for('main.discussion_delete', discussion_id=d.id) }}" class="danger-zone"
+        onsubmit="return confirm('Delete this saved discussion? This cannot be undone.')">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="link danger">Delete this discussion</button>
+  </form>
+</section>
+
+<div id="status" class="status" hidden></div>
+<div id="demo-banner" class="flash warning" hidden>These figures were saved from <b>demo data</b> (offline demo mode). They are for illustration only.</div>
+<div id="results">
+  {% include "_comparison_results.html" %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="saved-discussion" type="application/json">{{ snapshot_json|safe }}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+  window.NIMBUS = { templates: {{ template_payloads|tojson }} };
+</script>
+<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
+{% endblock %}

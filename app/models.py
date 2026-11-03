@@ -2,6 +2,7 @@
 from datetime import date, datetime, timezone
 
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.dialects import mysql
 from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
@@ -24,6 +25,7 @@ class User(db.Model):
 
     clients = db.relationship("Client", back_populates="rm", cascade="all, delete-orphan")
     snapshots = db.relationship("Snapshot", back_populates="rm", cascade="all, delete-orphan")
+    discussions = db.relationship("Discussion", back_populates="rm", cascade="all, delete-orphan")
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
@@ -50,6 +52,10 @@ class Client(db.Model):
     snapshots = db.relationship(
         "Snapshot", back_populates="client", cascade="all, delete-orphan",
         order_by="Snapshot.discussed_on.desc()",
+    )
+    discussions = db.relationship(
+        "Discussion", back_populates="client", cascade="all, delete-orphan",
+        order_by="(Discussion.discussed_on.desc(), Discussion.id.desc())",
     )
 
     @property
@@ -149,3 +155,77 @@ def upgrade_schema() -> list[str]:
             if column not in {c["name"] for c in inspect(db.engine).get_columns(table)}:
                 raise
     return added
+
+
+# --------------------------------------------------------------------------
+# Client-discussion snapshots (Features 3–5, Gaurav's schema)
+# --------------------------------------------------------------------------
+# MySQL TEXT holds only 64 KB; a 5-year comparison of 5 companies is larger.
+LONG_TEXT = db.Text().with_variant(mysql.MEDIUMTEXT(), "mysql")
+
+SOURCE_LABELS = {"yahoo": "Yahoo Finance", "demo": "Demo data"}
+
+
+class Discussion(db.Model):
+    """One saved client discussion: the whole comparison as it was shown, plus the RM's notes.
+
+    One client has many discussions; one discussion has many companies. `snapshot_json`
+    holds everything the Compare page displayed, so the discussion can be reopened
+    exactly as saved without fetching new market data.
+    """
+
+    __tablename__ = "discussions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    rm_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
+    discussed_on = db.Column(db.Date, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    data_retrieved_at = db.Column(db.DateTime)  # when the market data was fetched (UTC)
+    period = db.Column(db.String(8), nullable=False)
+    client_interests = db.Column(db.Text, nullable=False)
+    notes = db.Column(db.Text)
+    follow_up_on = db.Column(db.Date)
+    data_source = db.Column(db.String(16), nullable=False)  # yahoo / demo
+    snapshot_json = db.Column(LONG_TEXT, nullable=False)
+
+    rm = db.relationship("User", back_populates="discussions")
+    client = db.relationship("Client", back_populates="discussions")
+    companies = db.relationship("DiscussionCompany", back_populates="discussion",
+                                cascade="all, delete-orphan", order_by="DiscussionCompany.position")
+
+    @property
+    def is_demo(self) -> bool:
+        return self.data_source == "demo"
+
+    @property
+    def source_label(self) -> str:
+        return SOURCE_LABELS.get(self.data_source, self.data_source)
+
+
+class DiscussionCompany(db.Model):
+    """The values one company had when the discussion was saved."""
+
+    __tablename__ = "discussion_companies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    discussion_id = db.Column(db.Integer, db.ForeignKey("discussions.id"), nullable=False, index=True)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    ticker = db.Column(db.String(16), nullable=False, index=True)
+    company_name = db.Column(db.String(160), index=True)
+    currency = db.Column(db.String(8))
+    stock_price = db.Column(db.Numeric(14, 4))   # last close shown at the time of the discussion
+    price_date = db.Column(db.Date)              # date of that close
+    price_source = db.Column(db.String(16))      # yahoo / demo
+    fiscal_year = db.Column(db.Integer)
+    # DOUBLE, not FLOAT: MySQL FLOAT keeps only ~7 digits, so the saved ratios
+    # would no longer match the snapshot exactly.
+    revenue_growth = db.Column(db.Double)
+    net_margin = db.Column(db.Double)
+    debt_to_equity = db.Column(db.Double)
+
+    discussion = db.relationship("Discussion", back_populates="companies")
+
+    @property
+    def price_source_label(self) -> str:
+        return SOURCE_LABELS.get(self.price_source or "", "Source not recorded")

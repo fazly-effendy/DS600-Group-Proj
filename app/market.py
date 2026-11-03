@@ -20,7 +20,7 @@ import math
 import random
 import threading
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from .news import extract_analyst_view, extract_latest_ratings, fetch_news, parse_news
 
@@ -312,13 +312,18 @@ class MarketData:
 
     def _call(self, method: str, ticker: str, *args):
         def run():
+            # fetched_at records when the data was really fetched (results are cached),
+            # so a saved discussion can say how fresh its figures were.
+            fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             try:
-                return {"source": self.primary.name, "data": getattr(self.primary, method)(ticker, *args)}
+                data = getattr(self.primary, method)(ticker, *args)
+                return {"source": self.primary.name, "data": data, "fetched_at": fetched_at}
             except Exception as exc:  # network errors, rate limits, bad tickers
                 if self.primary is self.demo or not self.fallback:
                     raise MarketDataError(str(exc)) from exc
                 log.warning("Live %s failed for %s (%s); using demo data", method, ticker, exc)
-                return {"source": "demo", "data": getattr(self.demo, method)(ticker, *args)}
+                return {"source": "demo", "data": getattr(self.demo, method)(ticker, *args),
+                        "fetched_at": fetched_at}
 
         return self._cached((method, ticker, args), run)
 

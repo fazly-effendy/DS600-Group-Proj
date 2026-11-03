@@ -23,6 +23,7 @@ def create_app(config_class=Config):
 
     from .auth import bp as auth_bp
     from .routes import bp as main_bp
+    from . import discussions  # noqa: F401  (adds the saved-discussion pages to main_bp)
     from .api import bp as api_bp
     from .cli import register_cli
 

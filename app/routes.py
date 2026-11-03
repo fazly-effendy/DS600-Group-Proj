@@ -91,11 +91,13 @@ def compare():
         {"ticker": ticker, "name": details[0]}
         for ticker, details in DEMO_COMPANIES.items()
     ]
+    clients = Client.query.filter_by(rm_id=g.user.id).order_by(Client.client_code).all()
     return render_template("compare.html", periods=list(PERIODS), templates=TEMPLATES,
                            initial=request.args.get("tickers", ""),
                            initial_period=initial_period,
                            max_tickers=current_app.config["MAX_COMPARE_TICKERS"],
-                           company_directory=company_directory)
+                           company_directory=company_directory,
+                           clients=clients, today=date.today())
 
 
 # --------------------------------------------------------------------------

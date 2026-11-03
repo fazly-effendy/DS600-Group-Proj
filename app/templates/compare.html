@@ -40,96 +40,44 @@
 </div>
 
 <div id="results" hidden>
-  <!-- 1. At-a-glance company cards -->
-  <section class="card">
-    <div class="section-head">
-      <div>
-        <h2>At a glance</h2>
-        <p class="muted small section-note">Key figures for a quick client conversation.</p>
+  {% include "_comparison_results.html" %}
+
+  <!-- 6. Save the whole comparison as a client discussion (Features 3–5) -->
+  <section class="card" id="save-card">
+    <h2>Save this discussion</h2>
+    <p class="muted small">Saves everything above for one client: prices, financials, ratings and news as they are now, with the client's interests and your notes. Reopening it later shows exactly this, never today's data. Demo data is never saved as a client record.</p>
+    <form method="post" action="{{ url_for('main.discussion_save') }}" id="save-form" class="form save-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="tickers" id="save-tickers" value="{{ initial }}">
+      <input type="hidden" name="period" id="save-period" value="{{ initial_period }}">
+      <div class="form-row">
+        <label>Client
+          <select name="client_id" id="client-select" required>
+            <option value="" disabled {{ 'selected' if clients }}>Choose a client…</option>
+            {% for c in clients %}<option value="{{ c.id }}">{{ c.label }}</option>{% endfor %}
+            <option value="__new__" {{ 'selected' if not clients }}>+ New client…</option>
+          </select></label>
+        <label>Discussion date
+          <input type="date" name="discussed_on" value="{{ today.isoformat() }}" required></label>
       </div>
-    </div>
-    <div id="overview-cards" class="overview-grid"></div>
-  </section>
-
-  <!-- 2. Price performance -->
-  <section class="card">
-    <div class="section-head">
-      <h2>Price performance</h2>
-      <div class="seg" role="tablist">
-        <button type="button" class="seg-btn active" data-mode="rebased">Rebased to 100</button>
-        <button type="button" class="seg-btn" data-mode="prices">Actual price</button>
+      <fieldset id="new-client" class="subfields" hidden>
+        <legend>New client</legend>
+        {% with prefix='new_' %}{% include "_client_fields.html" %}{% endwith %}
+      </fieldset>
+      <label>Client interests <span class="hint">required: what the client cares about, e.g. income, growth, risk concerns</span>
+        <textarea name="client_interests" rows="3" required maxlength="5000"></textarea></label>
+      <label>Notes <span class="hint">optional</span>
+        <textarea name="notes" rows="3" maxlength="10000" placeholder="What was discussed, next steps…"></textarea></label>
+      <div class="form-row">
+        <label>Follow up on <span class="hint">optional</span>
+          <input type="date" name="follow_up_on"></label>
+        <div class="form-actions align-end"><button class="btn primary" id="save-button">Save discussion</button></div>
       </div>
-    </div>
-    <p class="muted small" id="mode-help">All prices start at 100 so you can compare returns, whatever each share costs.</p>
-    <div class="chart-wrap"><canvas id="price-chart"></canvas></div>
-  </section>
-
-  <!-- 3. Summary table -->
-  <section class="card">
-    <h2>Summary</h2>
-    <div class="table-wrap"><table class="table" id="summary-table"></table></div>
-    <p class="muted small">Volatility is annualised from daily returns. Max drawdown is the largest fall from a previous peak during the period.</p>
-  </section>
-
-  <!-- 3b. Feature 1: financials, analyst ratings and sourced news, on the same screen -->
-  <section class="card" id="briefing-section">
-    <div class="section-head">
-      <div>
-        <h2>Financials, ratings &amp; news</h2>
-        <p class="muted small section-note">Latest fiscal year from each company's annual statements, Yahoo Finance analyst ratings, and recent news with its source.</p>
-      </div>
-    </div>
-    <div id="briefing-status" class="muted small" hidden></div>
-
-    <h3 class="subhead">Key financials</h3>
-    <div class="table-wrap"><table class="table" id="financials-table"></table></div>
-    <p class="muted small">Amounts are in each company's reporting currency (M = million, B = billion, T = trillion). Debt-to-equity = total debt ÷ shareholders' equity. "—" means Yahoo did not report the figure.</p>
-
-    <h3 class="subhead">Analyst ratings</h3>
-    <div class="table-wrap"><table class="table" id="ratings-table"></table></div>
-    <p class="muted small">Source: Yahoo Finance analyst consensus. Upside = mean price target ÷ latest closing price − 1.</p>
-
-    <h3 class="subhead">News</h3>
-    <div id="news-list" class="news-grid"></div>
-    <p class="muted small">Headlines and summaries are shown exactly as the source provides them; Nimbus never writes or rewrites a summary.</p>
-  </section>
-
-  <!-- 4. Correlation (advanced, collapsed by default) -->
-  <details class="card disclosure">
-    <summary>
-      <span><b>Correlation &amp; diversification</b><small>See how closely the companies move together.</small></span>
-    </summary>
-    <div class="disclosure-body">
-      <p class="muted small">Correlation of daily returns: 1 means they move in lockstep, 0 means no relationship. Low correlation helps diversify a client's portfolio.</p>
-      <div class="table-wrap"><table class="table corr" id="corr-table"></table></div>
-    </div>
-  </details>
-
-  <!-- 5. Fundamentals with industry templates (loaded only when opened) -->
-  <details class="card disclosure" id="fundamentals-panel">
-    <summary>
-      <span><b>Financial ratios &amp; trends</b><small>Open the detailed industry-specific analysis.</small></span>
-    </summary>
-    <div class="disclosure-body">
-      <div class="section-head">
-        <h2 class="visually-hidden">Financial ratios &amp; trends</h2>
-        <label class="inline">Industry template
-          <select id="template-select">
-            {% for key, t in templates.items() %}<option value="{{ key }}">{{ t.label }}</option>{% endfor %}
-          </select>
-        </label>
-      </div>
-      <p class="muted small" id="template-desc">Open this section to load financial statements.</p>
-      <div class="table-wrap"><table class="table" id="valuation-table"></table></div>
-      <div id="trend-charts" class="trend-grid"></div>
-    </div>
-  </details>
-
-  <!-- 6. Save for a client -->
-  <section class="card">
-    <h2>Save for a client conversation</h2>
-    <p class="muted small">Record the live price at the time of the discussion and your notes against a client. Demo data is never saved as a price.</p>
-    <div id="save-buttons" class="chips"></div>
+    </form>
+    <details class="single-notes">
+      <summary class="muted small">Or record a quick note about one stock</summary>
+      <div id="save-buttons" class="chips"></div>
+    </details>
   </section>
 </div>
 {% endblock %}
