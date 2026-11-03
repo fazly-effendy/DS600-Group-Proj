@@ -1,3 +1,6 @@
+from datetime import date, timedelta
+from decimal import Decimal
+
 from app.models import Client, Snapshot, db
 
 from .conftest import login_as
@@ -39,6 +42,13 @@ def test_compare_validation(logged_in):
     assert logged_in.get("/api/compare?tickers=AAPL,BAD%3B--").status_code == 400
 
 
+def test_compare_page_supports_company_name_suggestions_and_period(logged_in):
+    page = logged_in.get("/compare?tickers=AAPL,MSFT&period=5y").data
+    assert b"Apple Inc." in page
+    assert b"Microsoft Corporation" in page
+    assert b'<option value="5y" selected>5y</option>' in page
+
+
 def test_fundamentals_api(logged_in):
     d = logged_in.get("/api/fundamentals?tickers=AAPL,MSFT&template=technology").get_json()
     assert d["template"]["key"] == "technology"
@@ -76,6 +86,30 @@ def test_retrieve_by_client_and_ticker(logged_in, app):
     assert b"since discussion" in page.data
     csv = logged_in.get("/snapshots/export.csv?ticker=AAPL").data.decode()
     assert "AAPL" in csv and "MSFT" not in csv
+
+
+def test_dashboard_cards_and_follow_up_filter(logged_in, app):
+    with app.app_context():
+        client = Client(rm_id=1, client_code="C-FOLLOW", name="Follow-up Client")
+        db.session.add(client)
+        db.session.flush()
+        db.session.add_all([
+            Snapshot(rm_id=1, client_id=client.id, ticker="AAPL", company_name="Apple",
+                     price_at_discussion=Decimal("100"), discussed_on=date.today(),
+                     follow_up_on=date.today() - timedelta(days=1), notes="Due follow-up"),
+            Snapshot(rm_id=1, client_id=client.id, ticker="MSFT", company_name="Microsoft",
+                     price_at_discussion=Decimal("200"), discussed_on=date.today(),
+                     follow_up_on=date.today() + timedelta(days=7), notes="Future follow-up"),
+        ])
+        db.session.commit()
+
+    dashboard = logged_in.get("/").data
+    assert b"follow_up=due" in dashboard
+    assert b"View clients" in dashboard
+
+    due = logged_in.get("/snapshots?follow_up=due").data
+    assert b"Due follow-up" in due
+    assert b"Future follow-up" not in due
 
 
 def test_rm_cannot_see_other_rms_records(logged_in, client, app):

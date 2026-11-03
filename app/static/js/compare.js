@@ -3,7 +3,7 @@
   const COLORS = ['#1f6feb', '#e8590c', '#2b8a3e', '#ae3ec9', '#c92a2a'];
   const $ = (id) => document.getElementById(id);
   const form = $('compare-form');
-  const state = { data: null, mode: 'rebased', charts: [] };
+  const state = { data: null, mode: 'rebased', charts: [], fundamentalsLoaded: false };
 
   // ---------- formatting ----------
   const fmt = {
@@ -41,6 +41,88 @@
 
   function destroyCharts() { state.charts.forEach((c) => c.destroy()); state.charts = []; }
 
+  // ---------- company-name autocomplete ----------
+  const tickerInput = $('tickers');
+  const suggestionBox = $('company-suggestions');
+  const companyDirectory = window.NIMBUS.companyDirectory || [];
+  let activeSuggestion = -1;
+
+  function currentCompanyTerm() {
+    return tickerInput.value.split(',').pop().trim().toLowerCase();
+  }
+
+  function closeSuggestions() {
+    suggestionBox.hidden = true;
+    suggestionBox.innerHTML = '';
+    activeSuggestion = -1;
+    tickerInput.setAttribute('aria-expanded', 'false');
+  }
+
+  function chooseCompany(ticker) {
+    const parts = tickerInput.value.split(',');
+    parts[parts.length - 1] = ` ${ticker}`;
+    tickerInput.value = parts.map((p) => p.trim()).filter(Boolean).join(', ');
+    closeSuggestions();
+    tickerInput.focus();
+  }
+
+  function setActiveSuggestion(index) {
+    const buttons = [...suggestionBox.querySelectorAll('.company-suggestion')];
+    if (!buttons.length) return;
+    activeSuggestion = (index + buttons.length) % buttons.length;
+    buttons.forEach((button, i) => button.classList.toggle('active', i === activeSuggestion));
+  }
+
+  function renderCompanySuggestions() {
+    const query = currentCompanyTerm();
+    if (!query) { closeSuggestions(); return; }
+    const matches = companyDirectory
+      .map((company) => ({
+        ...company,
+        rank: company.ticker.toLowerCase().startsWith(query) || company.name.toLowerCase().startsWith(query) ? 0 : 1,
+      }))
+      .filter((company) => company.ticker.toLowerCase().includes(query) || company.name.toLowerCase().includes(query))
+      .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+      .slice(0, 6);
+    if (!matches.length) { closeSuggestions(); return; }
+
+    suggestionBox.innerHTML = '';
+    matches.forEach((company) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'company-suggestion';
+      button.setAttribute('role', 'option');
+      const name = document.createElement('span');
+      name.className = 'company-suggestion-name';
+      name.textContent = company.name;
+      const ticker = document.createElement('span');
+      ticker.className = 'company-suggestion-ticker';
+      ticker.textContent = company.ticker;
+      button.append(name, ticker);
+      button.addEventListener('mousedown', (event) => event.preventDefault());
+      button.addEventListener('click', () => chooseCompany(company.ticker));
+      suggestionBox.appendChild(button);
+    });
+    suggestionBox.hidden = false;
+    tickerInput.setAttribute('aria-expanded', 'true');
+    activeSuggestion = -1;
+  }
+
+  tickerInput.addEventListener('input', renderCompanySuggestions);
+  tickerInput.addEventListener('focus', renderCompanySuggestions);
+  tickerInput.addEventListener('blur', () => setTimeout(closeSuggestions, 120));
+  tickerInput.addEventListener('keydown', (event) => {
+    if (suggestionBox.hidden) return;
+    const buttons = suggestionBox.querySelectorAll('.company-suggestion');
+    if (event.key === 'ArrowDown') { event.preventDefault(); setActiveSuggestion(activeSuggestion + 1); }
+    if (event.key === 'ArrowUp') { event.preventDefault(); setActiveSuggestion(activeSuggestion - 1); }
+    if (event.key === 'Enter' && activeSuggestion >= 0) {
+      event.preventDefault();
+      buttons[activeSuggestion].click();
+    }
+    if (event.key === 'Escape') closeSuggestions();
+  });
+
   function baseChartOptions(yFormat) {
     const grid = cssVar('--line') || '#e5e7eb';
     const text = cssVar('--muted') || '#6b7280';
@@ -58,7 +140,33 @@
     };
   }
 
-  // ---------- 1. price chart ----------
+  // ---------- 1. at-a-glance cards ----------
+  function renderOverview() {
+    const overview = $('overview-cards');
+    overview.className = `overview-grid overview-grid-${state.data.companies.length}`;
+    overview.innerHTML = state.data.companies.map((company, i) => {
+      const stats = company.stats;
+      const totalReturn = stats.total_return;
+      const returnClass = totalReturn >= 0 ? 'up' : 'down';
+      return `<article class="overview-card" style="--company-color:${COLORS[i]}">
+        <div class="overview-head">
+          <div class="overview-company" title="${esc(companyLabel(company))}">${esc(companyLabel(company))}</div>
+          <span class="ticker">${esc(company.ticker)}</span>
+        </div>
+        <div class="muted small overview-sector">${esc(company.sector || 'Sector unavailable')}</div>
+        <div class="overview-return ${returnClass}">${fmt.pct(totalReturn, true)}</div>
+        <div class="muted small">Return over ${esc(state.data.period)}</div>
+        <div class="overview-metrics">
+          <div class="overview-metric"><span>Last price</span><b>${esc(company.currency)} ${fmt.price(company.last_price)}</b></div>
+          <div class="overview-metric"><span>Market cap</span><b>${fmt.money(company.market_cap)}</b></div>
+          <div class="overview-metric"><span>Volatility</span><b>${fmt.pct(stats.annual_vol)}</b></div>
+          <div class="overview-metric"><span>Max drawdown</span><b>${fmt.pct(stats.max_drawdown)}</b></div>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  // ---------- 2. price chart ----------
   let priceChart = null;
   function renderPriceChart() {
     const { companies } = state.data;
@@ -85,7 +193,7 @@
     if (state.data) renderPriceChart();
   }));
 
-  // ---------- 2. summary ----------
+  // ---------- 3. summary ----------
   function renderSummary() {
     const rows = state.data.companies.map((c, i) => {
       const s = c.stats;
@@ -106,7 +214,7 @@
       <th class="num">Volatility</th><th class="num">Max drawdown</th><th class="num">Market cap</th></tr></thead><tbody>${rows}</tbody>`;
   }
 
-  // ---------- 3. correlation ----------
+  // ---------- 4. correlation ----------
   function renderCorrelation() {
     const { tickers, matrix } = state.data.correlation;
     const companies = new Map(state.data.companies.map((c) => [c.ticker, c]));
@@ -121,7 +229,7 @@
     $('corr-table').innerHTML = head + `<tbody>${body}</tbody>`;
   }
 
-  // ---------- 4. fundamentals ----------
+  // ---------- 5. fundamentals ----------
   async function loadFundamentals() {
     const tickers = state.data.companies.map((c) => c.ticker).join(',');
     const tpl = $('template-select').value;
@@ -135,6 +243,7 @@
       $('template-desc').textContent = d.template.description;
       renderValuation(d);
       renderTrends(d);
+      state.fundamentalsLoaded = true;
     } catch (e) {
       $('template-desc').textContent = e.message;
     }
@@ -170,7 +279,14 @@
     if (!wrap.children.length) wrap.innerHTML = '<p class="muted">No statement data available for these companies.</p>';
   }
 
-  $('template-select').addEventListener('change', () => state.data && loadFundamentals());
+  const fundamentalsPanel = $('fundamentals-panel');
+  fundamentalsPanel.addEventListener('toggle', () => {
+    if (fundamentalsPanel.open && state.data && !state.fundamentalsLoaded) loadFundamentals();
+  });
+  $('template-select').addEventListener('change', () => {
+    state.fundamentalsLoaded = false;
+    if (state.data && fundamentalsPanel.open) loadFundamentals();
+  });
 
   // ---------- 5. save buttons ----------
   function renderSaveButtons() {
@@ -184,29 +300,40 @@
   async function run() {
     const tickers = $('tickers').value;
     const period = $('period').value;
+    closeSuggestions();
     setStatus('Loading market data…');
     $('demo-banner').hidden = true;
+    $('results').hidden = true;
+    form.querySelector('button[type="submit"], button:not([type])').disabled = true;
     try {
       const d = await getJSON(`/api/compare?tickers=${encodeURIComponent(tickers)}&period=${period}`);
       state.data = d;
-      history.replaceState(null, '', `?tickers=${encodeURIComponent(d.companies.map((c) => c.ticker).join(','))}`);
+      state.fundamentalsLoaded = false;
+      destroyCharts();
+      $('trend-charts').innerHTML = '';
+      $('valuation-table').innerHTML = '';
+      $('template-desc').textContent = 'Open this section to load financial statements.';
+      history.replaceState(null, '', `?tickers=${encodeURIComponent(d.companies.map((c) => c.ticker).join(','))}&period=${encodeURIComponent(period)}`);
       $('results').hidden = false;
       $('demo-banner').hidden = !d.demo_data;
       $('template-select').value = d.suggested_template;
+      renderOverview();
       renderPriceChart();
       renderSummary();
       renderCorrelation();
       renderSaveButtons();
       setStatus('');
-      loadFundamentals();
+      if (fundamentalsPanel.open) loadFundamentals();
     } catch (e) {
       setStatus(e.message, true);
+    } finally {
+      form.querySelector('button[type="submit"], button:not([type])').disabled = false;
     }
   }
 
   form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
   document.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => {
-    $('tickers').value = b.dataset.preset; run();
+    $('tickers').value = b.dataset.preset; closeSuggestions(); run();
   }));
   if ($('tickers').value.trim()) run();
 })();

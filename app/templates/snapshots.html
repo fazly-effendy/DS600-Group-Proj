@@ -25,6 +25,13 @@
       <option value="">Any</option>
       {% for l in levels %}<option {{ 'selected' if args.get('interest') == l }}>{{ l }}</option>{% endfor %}
     </select></label>
+  <label>Follow-up
+    <select name="follow_up">
+      <option value="">Any</option>
+      <option value="due" {{ 'selected' if args.get('follow_up') == 'due' }}>Due / overdue</option>
+      <option value="upcoming" {{ 'selected' if args.get('follow_up') == 'upcoming' }}>Upcoming</option>
+      <option value="scheduled" {{ 'selected' if args.get('follow_up') == 'scheduled' }}>All scheduled</option>
+    </select></label>
   <label>From <input type="date" name="date_from" value="{{ args.get('date_from','') }}"></label>
   <label>To <input type="date" name="date_to" value="{{ args.get('date_to','') }}"></label>
   <label class="grow">Search notes <input name="q" value="{{ args.get('q','') }}" placeholder="e.g. dividends"></label>
