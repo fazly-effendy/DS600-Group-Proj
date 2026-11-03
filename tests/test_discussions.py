@@ -314,3 +314,15 @@ def test_navigation_and_pages_render():
     assert b'action="/discussions"' in nav  # one Save for the whole comparison
     for url in ["/discussions", f"/discussions/{did}", "/discussions?company=apple&client_id=1"]:
         assert rm.get(url).status_code == 200, url
+
+
+def test_clients_list_counts_discussions_and_last_spoke():
+    """Found in the 4 Nov QA run: the Clients list ignored saved discussions."""
+    app = make_app()
+    rm = login(app)
+    save(rm, discussed_on="2026-10-20")
+    page = rm.get("/clients").data.decode()
+    row = next(r for r in re.findall(r"<tr class=\"clickable\".*?</tr>", page, re.S) if "C-1001" in r)
+    cells = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
+    assert cells[0] == "C-1001"
+    assert cells[4:7] == ["1", "0", "20 Oct 2026"]  # discussions, stock notes, last spoke
