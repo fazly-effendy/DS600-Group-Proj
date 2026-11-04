@@ -1,9 +1,39 @@
 """Archive old discussion snapshots to private S3 storage."""
 import hashlib
 import json
-from datetime import date
 
 from .models import Snapshot, db
+from .timeutil import local_today
+
+ARCHIVE_LOCK = "nimbus-archive"
+
+
+def _acquire_lock(name):
+    """MySQL named lock, so only one server runs the archive at a time.
+
+    Every server in the Auto Scaling group has the monthly timer; the first to get
+    the lock runs the job and the others skip it. SQLite (local) has one process,
+    so no lock is needed there.
+    """
+    if db.engine.dialect.name != "mysql":
+        return True
+    got = db.session.execute(db.text("SELECT GET_LOCK(:name, 0)"), {"name": name}).scalar()
+    return got == 1
+
+
+def _release_lock(name):
+    if db.engine.dialect.name == "mysql":
+        db.session.execute(db.text("SELECT RELEASE_LOCK(:name)"), {"name": name})
+
+
+def run_exclusively(name, job):
+    """Run job() only if this server gets the lock; return its result, or None if skipped."""
+    if not _acquire_lock(name):
+        return None
+    try:
+        return job()
+    finally:
+        _release_lock(name)
 
 
 def _snapshot_payload(snapshot):
@@ -50,7 +80,7 @@ def archive_snapshots(bucket, s3_client, years=5, today=None):
     """Archive snapshots discussed before the calendar-date cutoff; return count."""
     if years < 1:
         raise ValueError("Archive age must be at least one year.")
-    today = today or date.today()
+    today = today or local_today()
     try:
         cutoff = today.replace(year=today.year - years)
     except ValueError:

@@ -12,7 +12,8 @@ from .api import parse_tickers
 from .auth import login_required
 from .industry import TEMPLATES
 from .market import DEMO_COMPANIES, PERIODS, MarketDataError
-from .models import Client, Snapshot, db
+from .models import Client, Discussion, Snapshot, db
+from .timeutil import local_today
 
 bp = Blueprint("main", __name__)
 
@@ -59,7 +60,7 @@ def _latest_prices(tickers):
 @bp.route("/")
 @login_required
 def dashboard():
-    today = date.today()
+    today = local_today()
     base = Snapshot.query.filter_by(rm_id=g.user.id)
     follow_ups = (base.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= today + timedelta(days=14))
                   .order_by(Snapshot.follow_up_on).limit(10).all())
@@ -91,11 +92,13 @@ def compare():
         {"ticker": ticker, "name": details[0]}
         for ticker, details in DEMO_COMPANIES.items()
     ]
+    clients = Client.query.filter_by(rm_id=g.user.id).order_by(Client.client_code).all()
     return render_template("compare.html", periods=list(PERIODS), templates=TEMPLATES,
                            initial=request.args.get("tickers", ""),
                            initial_period=initial_period,
                            max_tickers=current_app.config["MAX_COMPARE_TICKERS"],
-                           company_directory=company_directory)
+                           company_directory=company_directory,
+                           clients=clients, today=local_today())
 
 
 # --------------------------------------------------------------------------
@@ -104,9 +107,22 @@ def compare():
 @bp.route("/clients")
 @login_required
 def clients():
-    rows = (db.session.query(Client, func.count(Snapshot.id), func.max(Snapshot.discussed_on))
-            .outerjoin(Snapshot).filter(Client.rm_id == g.user.id)
-            .group_by(Client.id).order_by(Client.client_code).all())
+    # Saved discussions and stock notes are counted separately; "last spoke" is the
+    # latest date from either.
+    disc = (db.session.query(Discussion.client_id, func.count(Discussion.id).label("n"),
+                             func.max(Discussion.discussed_on).label("last"))
+            .filter(Discussion.rm_id == g.user.id).group_by(Discussion.client_id).subquery())
+    notes = (db.session.query(Snapshot.client_id, func.count(Snapshot.id).label("n"),
+                              func.max(Snapshot.discussed_on).label("last"))
+             .filter(Snapshot.rm_id == g.user.id).group_by(Snapshot.client_id).subquery())
+    rows = []
+    for client, n_disc, last_disc, n_notes, last_note in (
+            db.session.query(Client, disc.c.n, disc.c.last, notes.c.n, notes.c.last)
+            .outerjoin(disc, disc.c.client_id == Client.id)
+            .outerjoin(notes, notes.c.client_id == Client.id)
+            .filter(Client.rm_id == g.user.id).order_by(Client.client_code)):
+        last = max((d for d in (last_disc, last_note) if d), default=None)
+        rows.append((client, n_disc or 0, n_notes or 0, last))
     return render_template("clients.html", rows=rows)
 
 
@@ -144,7 +160,7 @@ def _create_client_from_form(form, prefix=""):
 def client_detail(client_id):
     client = _own_client(client_id)
     prices = _latest_prices([s.ticker for s in client.snapshots])
-    return render_template("client_detail.html", client=client, prices=prices, today=date.today())
+    return render_template("client_detail.html", client=client, prices=prices, today=local_today())
 
 
 @bp.route("/clients/<int:client_id>/delete", methods=["POST"])
@@ -174,9 +190,9 @@ def _filtered_snapshots():
     if _parse_date(args.get("date_to")):
         q = q.filter(Snapshot.discussed_on <= _parse_date(args["date_to"]))
     if args.get("follow_up") == "due":
-        q = q.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= date.today())
+        q = q.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= local_today())
     elif args.get("follow_up") == "upcoming":
-        q = q.filter(Snapshot.follow_up_on > date.today())
+        q = q.filter(Snapshot.follow_up_on > local_today())
     elif args.get("follow_up") == "scheduled":
         q = q.filter(Snapshot.follow_up_on.isnot(None))
     if args.get("q"):
@@ -203,10 +219,10 @@ def snapshots_export():
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Discussed on", "Client code", "Client name", "Ticker", "Company", "Price",
-                     "Currency", "Interest", "Tags", "Notes", "Follow up on"])
+                     "Currency", "Price source", "Interest", "Tags", "Notes", "Follow up on"])
     for s in _filtered_snapshots().all():
         writer.writerow([s.discussed_on, s.client.client_code, s.client.name, s.ticker, s.company_name,
-                         s.price_at_discussion, s.currency, s.interest_level, s.tags or "", s.notes or "",
+                         s.price_at_discussion, s.currency, s.price_source or "not recorded", s.interest_level, s.tags or "", s.notes or "",
                          s.follow_up_on or ""])
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=nimbus_snapshots.csv"})
@@ -230,12 +246,18 @@ def _fill_snapshot(snap, form):
         except (ValueError, TypeError):
             return "Choose a client."
 
-    # Price: what the RM typed, otherwise the latest market price.
+    # Demo data is only acceptable when the app was deliberately started in demo
+    # mode (MARKET_DATA_PROVIDER=demo, e.g. offline or in tests). A silent fallback
+    # to demo data must never end up in a client record as a real price.
+    demo_mode = current_app.config["MARKET_DATA_PROVIDER"] == "demo"
+
+    # Price: what the RM typed, otherwise the latest live market price.
     price_raw = form.get("price", "").strip()
     company, currency = None, "USD"
     try:
-        info = market().info(ticker)["data"]
-        company, currency = info["name"], info["currency"]
+        info = market().info(ticker)
+        if info["source"] != "demo" or demo_mode:
+            company, currency = info["data"]["name"], info["data"]["currency"]
     except MarketDataError:
         pass
     if price_raw:
@@ -245,11 +267,20 @@ def _fill_snapshot(snap, form):
                 raise InvalidOperation
         except InvalidOperation:
             return "Price must be a positive number."
+        # Editing other fields keeps the original source if the price is unchanged.
+        unchanged = (snap.price_at_discussion is not None and snap.ticker == ticker
+                     and Decimal(snap.price_at_discussion) == price)
+        source = snap.price_source if unchanged else "manual"
     else:
         try:
-            price = Decimal(str(market().latest_price(ticker)["price"]))
+            quote = market().latest_price(ticker)
         except MarketDataError as exc:
-            return f"Couldn't fetch a price for {ticker} ({exc}). Type the price in manually."
+            return f"Couldn't fetch a live price for {ticker} ({exc}). Type the price you discussed instead."
+        if quote["source"] == "demo" and not demo_mode:
+            return (f"No live price is available for {ticker} right now (Yahoo Finance did not respond). "
+                    "Type the price you discussed, or try again in a few minutes.")
+        price = Decimal(str(quote["price"]))
+        source = quote["source"]
 
     level = form.get("interest_level", "Medium")
     snap.client = client
@@ -258,7 +289,8 @@ def _fill_snapshot(snap, form):
     snap.company_name = company or snap.company_name or ticker
     snap.currency = currency
     snap.price_at_discussion = price
-    snap.discussed_on = _parse_date(form.get("discussed_on"), date.today())
+    snap.price_source = source
+    snap.discussed_on = _parse_date(form.get("discussed_on"), local_today())
     snap.interest_level = level if level in Snapshot.INTEREST_LEVELS else "Medium"
     snap.tags = ", ".join(t.strip() for t in form.get("tags", "").split(",") if t.strip())[:255] or None
     snap.notes = form.get("notes", "").strip() or None
@@ -277,15 +309,15 @@ def snapshot_new():
             db.session.rollback()
             flash(error, "error")
             return render_template("snapshot_form.html", snap=None, form=request.form, clients=clients,
-                                   levels=Snapshot.INTEREST_LEVELS, today=date.today())
+                                   levels=Snapshot.INTEREST_LEVELS, today=local_today())
         db.session.add(snap)
         db.session.commit()
         flash(f"Saved discussion with {snap.client.label} about {snap.ticker}.", "success")
         return redirect(url_for("main.client_detail", client_id=snap.client_id))
-    prefill = {"ticker": request.args.get("ticker", ""), "price": request.args.get("price", ""),
-               "client_id": request.args.get("client_id", "")}
+    # The price is never taken from the URL: it is fetched live on save, or typed by the RM.
+    prefill = {"ticker": request.args.get("ticker", ""), "client_id": request.args.get("client_id", "")}
     return render_template("snapshot_form.html", snap=None, form=prefill, clients=clients,
-                           levels=Snapshot.INTEREST_LEVELS, today=date.today())
+                           levels=Snapshot.INTEREST_LEVELS, today=local_today())
 
 
 @bp.route("/snapshots/<int:snapshot_id>/edit", methods=["GET", "POST"])
@@ -309,7 +341,7 @@ def snapshot_edit(snapshot_id):
         "follow_up_on": snap.follow_up_on.isoformat() if snap.follow_up_on else "",
     }
     return render_template("snapshot_form.html", snap=snap, form=form, clients=clients,
-                           levels=Snapshot.INTEREST_LEVELS, today=date.today())
+                           levels=Snapshot.INTEREST_LEVELS, today=local_today())
 
 
 @bp.route("/snapshots/<int:snapshot_id>/delete", methods=["POST"])

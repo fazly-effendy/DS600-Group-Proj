@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Discussions{% endblock %}
+{% block title %}Stock notes{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>Client discussions</h1><p class="muted">Search past conversations by client, company, interest or date.</p></div>
+  <div><h1>Stock notes</h1><p class="muted">Quick notes about one stock for a client. To save a full comparison, use <a href="{{ url_for('main.compare') }}">Compare</a> → Save this discussion.</p></div>
   <div class="actions">
     <a class="btn" href="{{ url_for('main.snapshots_export', **args) }}">Export CSV</a>
-    <a class="btn primary" href="{{ url_for('main.snapshot_new') }}">+ Record discussion</a>
+    <a class="btn primary" href="{{ url_for('main.snapshot_new') }}">+ Stock note</a>
   </div>
 </div>
 
@@ -57,7 +57,7 @@
         <td class="nowrap">{{ s.discussed_on.strftime('%d %b %Y') }}</td>
         <td><a href="{{ url_for('main.client_detail', client_id=s.client_id) }}">{{ s.client.name }}</a><div class="muted small mono">{{ s.client.client_code }}</div></td>
         <td><span class="ticker">{{ s.ticker }}</span></td>
-        <td class="num mono">{{ s.price_at_discussion|money }}</td>
+        <td class="num mono">{{ s.price_at_discussion|money }}<div class="source small {{ 'demo' if s.is_demo }}">{{ s.price_source_label }}</div></td>
         {% if prices %}
           <td class="num mono">{{ now|money if now else '—' }}</td>
           <td class="num">{% if now %}{% set chg = now / (s.price_at_discussion|float) - 1 %}<span class="chg {{ 'up' if chg >= 0 else 'down' }}">{{ chg|pct(signed=True) }}</span>{% else %}—{% endif %}</td>

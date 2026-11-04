@@ -1,8 +1,15 @@
-/* Comparison page: price chart, summary, correlation, fundamentals by industry template. */
+/* Comparison page: price chart, summary, correlation, fundamentals by industry template.
+ *
+ * Also used, read-only, by a reopened saved discussion: when the page contains
+ * <script id="saved-discussion">, everything is drawn from that saved snapshot and
+ * no market-data request is made.
+ */
 (() => {
   const COLORS = ['#1f6feb', '#e8590c', '#2b8a3e', '#ae3ec9', '#c92a2a'];
   const $ = (id) => document.getElementById(id);
   const form = $('compare-form');
+  const savedEl = $('saved-discussion');
+  const SAVED = savedEl ? JSON.parse(savedEl.textContent) : null;
   const state = { data: null, mode: 'rebased', charts: [], fundamentalsLoaded: false };
 
   // ---------- formatting ----------
@@ -44,7 +51,7 @@
   // ---------- company-name autocomplete ----------
   const tickerInput = $('tickers');
   const suggestionBox = $('company-suggestions');
-  const companyDirectory = window.NIMBUS.companyDirectory || [];
+  const companyDirectory = (window.NIMBUS && window.NIMBUS.companyDirectory) || [];
   let activeSuggestion = -1;
 
   function currentCompanyTerm() {
@@ -52,6 +59,7 @@
   }
 
   function closeSuggestions() {
+    if (!suggestionBox) return;
     suggestionBox.hidden = true;
     suggestionBox.innerHTML = '';
     activeSuggestion = -1;
@@ -108,10 +116,10 @@
     activeSuggestion = -1;
   }
 
-  tickerInput.addEventListener('input', renderCompanySuggestions);
-  tickerInput.addEventListener('focus', renderCompanySuggestions);
-  tickerInput.addEventListener('blur', () => setTimeout(closeSuggestions, 120));
-  tickerInput.addEventListener('keydown', (event) => {
+  if (tickerInput) tickerInput.addEventListener('input', renderCompanySuggestions);
+  if (tickerInput) tickerInput.addEventListener('focus', renderCompanySuggestions);
+  if (tickerInput) tickerInput.addEventListener('blur', () => setTimeout(closeSuggestions, 120));
+  if (tickerInput) tickerInput.addEventListener('keydown', (event) => {
     if (suggestionBox.hidden) return;
     const buttons = suggestionBox.querySelectorAll('.company-suggestion');
     if (event.key === 'ArrowDown') { event.preventDefault(); setActiveSuggestion(activeSuggestion + 1); }
@@ -214,6 +222,101 @@
       <th class="num">Volatility</th><th class="num">Max drawdown</th><th class="num">Market cap</th></tr></thead><tbody>${rows}</tbody>`;
   }
 
+  // ---------- 3b. financials, ratings and news (Feature 1) ----------
+  const NO_SUMMARY_TEXT = 'No summary provided by the source';
+  const safeUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null);
+  const fmtDate = (iso) => {
+    if (!iso) return 'Date not given';
+    const d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  function companyHeader(companies) {
+    return `<thead><tr><th></th>${companies.map((c, i) =>
+      `<th class="num"><span class="dot" style="background:${COLORS[i]}"></span>${esc(companyLabel(c))}<div class="muted small">${esc(c.ticker)}</div></th>`).join('')}</tr></thead>`;
+  }
+
+  function renderFinancials(companies) {
+    const rows = [
+      ['Fiscal year', (f) => f.year ?? '—'],
+      ['Revenue', (f) => fmt.money(f.revenue)],
+      ['Net income', (f) => fmt.money(f.net_income)],
+      ['Total debt', (f) => fmt.money(f.total_debt)],
+      ["Shareholders' equity", (f) => fmt.money(f.equity)],
+      ['Revenue growth (YoY)', (f) => fmt.pct(f.revenue_growth, true), 'core'],
+      ['Net profit margin', (f) => fmt.pct(f.net_margin), 'core'],
+      ['Debt-to-equity', (f, c) => fmt.x(f.debt_to_equity)
+        + (c.is_bank ? '<div class="muted small">not meaningful for banks</div>' : ''), 'core'],
+    ];
+    const body = rows.map(([label, cell, cls]) => `<tr class="${cls || ''}"><td>${esc(label)}</td>${companies.map((c) => {
+      const f = c.financials || {};
+      return f.error ? `<td class="num muted small">${esc(f.error)}</td>` : `<td class="num">${cell(f, c)}</td>`;
+    }).join('')}</tr>`).join('');
+    $('financials-table').innerHTML = companyHeader(companies) + `<tbody>${body}</tbody>`;
+  }
+
+  function renderRatings(companies) {
+    const count = (k) => (r) => (r.counts && r.counts[k] != null ? String(r.counts[k]) : '—');
+    const rows = [
+      ['Consensus', (r) => esc(r.view?.recommendation ? r.view.recommendation.replace(/\b\w/g, (m) => m.toUpperCase()) : '—')],
+      ['Number of analysts', (r) => (r.view?.analysts ?? '—')],
+      ['Strong buy', count('strongBuy')], ['Buy', count('buy')], ['Hold', count('hold')],
+      ['Sell', count('sell')], ['Strong sell', count('strongSell')],
+      ['Mean price target', (r, c) => (r.view?.target_mean != null ? `${esc(c.currency || '')} ${fmt.price(r.view.target_mean)}` : '—')],
+      ['Upside to mean target', (r) => fmt.pct(r.view?.upside, true)],
+    ];
+    const body = rows.map(([label, cell]) => `<tr><td>${esc(label)}</td>${companies.map((c) => {
+      const r = c.ratings || {};
+      if (!r.counts && !r.view) return `<td class="num muted small">${esc(r.message || 'No analyst ratings available.')}</td>`;
+      return `<td class="num">${cell(r, c)}</td>`;
+    }).join('')}</tr>`).join('');
+    $('ratings-table').innerHTML = companyHeader(companies) + `<tbody>${body}</tbody>`;
+  }
+
+  function renderNewsItem(item) {
+    const url = safeUrl(item.url);
+    const headline = url
+      ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(item.headline)}</a>`
+      : `${esc(item.headline)} <span class="muted small">(no link provided)</span>`;
+    const source = item.publisher ? esc(item.publisher) : `${esc(item.via || 'Yahoo Finance')} <span class="muted">(publisher not given)</span>`;
+    const summary = item.summary
+      ? `<p class="news-summary">${esc(item.summary)}</p>${item.summary_source ? `<div class="muted small">Summary from ${esc(item.summary_source)}</div>` : ''}`
+      : `<p class="news-summary muted"><i>${NO_SUMMARY_TEXT}</i></p>`;
+    return `<li class="news-item"><div class="news-headline">${headline}</div>
+      <div class="muted small">Source: ${source} · ${esc(fmtDate(item.published_at))}</div>${summary}</li>`;
+  }
+
+  function renderNews(companies) {
+    $('news-list').innerHTML = companies.map((c, i) => {
+      const n = c.news || {};
+      const items = n.items || [];
+      const list = items.length
+        ? `<ul class="news-items">${items.map(renderNewsItem).join('')}</ul>`
+        : `<p class="muted small">${esc(n.message || 'No news found.')}</p>`;
+      const note = items.length && n.route ? `<div class="muted small">Via ${esc(n.route)}${n.message ? ` — ${esc(n.message)}` : ''}</div>` : '';
+      return `<div class="news-company" style="--company-color:${COLORS[i]}">
+        <div class="news-company-head"><b>${esc(companyLabel(c))}</b> <span class="ticker">${esc(c.ticker)}</span></div>
+        ${note}${list}</div>`;
+    }).join('');
+  }
+
+  async function loadBriefing(tickers) {
+    const status = $('briefing-status');
+    status.hidden = false;
+    status.textContent = 'Loading financials, analyst ratings and news…';
+    ['financials-table', 'ratings-table', 'news-list'].forEach((id) => { $(id).innerHTML = ''; });
+    try {
+      const d = SAVED ? SAVED.briefing : await getJSON(`/api/briefing?tickers=${encodeURIComponent(tickers)}`);
+      if (d.demo_data) $('demo-banner').hidden = false;
+      renderFinancials(d.companies);
+      renderRatings(d.companies);
+      renderNews(d.companies);
+      status.hidden = true;
+    } catch (e) {
+      status.textContent = e.message;
+    }
+  }
+
   // ---------- 4. correlation ----------
   function renderCorrelation() {
     const { tickers, matrix } = state.data.correlation;
@@ -238,7 +341,7 @@
     $('trend-charts').innerHTML = '';
     $('valuation-table').innerHTML = '';
     try {
-      const d = await getJSON(`/api/fundamentals?tickers=${encodeURIComponent(tickers)}&template=${tpl}`);
+      const d = SAVED ? savedFundamentals(tpl) : await getJSON(`/api/fundamentals?tickers=${encodeURIComponent(tickers)}&template=${tpl}`);
       if (d.demo_data) $('demo-banner').hidden = false;
       $('template-desc').textContent = d.template.description;
       renderValuation(d);
@@ -247,6 +350,18 @@
     } catch (e) {
       $('template-desc').textContent = e.message;
     }
+  }
+
+  // Saved discussion: rebuild the fundamentals view from the saved yearly rows and
+  // the saved quote figures, for any template, without asking the server.
+  function savedFundamentals(key) {
+    const template = (window.NIMBUS.templates || []).find((t) => t.key === key) || window.NIMBUS.templates[0];
+    const companies = SAVED.compare.companies.map((c) => ({
+      ticker: c.ticker, name: c.name, currency: c.currency,
+      snapshot: Object.fromEntries(template.metrics.filter((m) => m.source === 'snapshot').map((m) => [m.key, c[m.key] ?? null])),
+      trend: (SAVED.trends || {})[c.ticker] || [],
+    }));
+    return { template, companies, demo_data: SAVED.data_source === 'demo' };
   }
 
   function renderValuation(d) {
@@ -290,9 +405,11 @@
 
   // ---------- 5. save buttons ----------
   function renderSaveButtons() {
+    if (!$('save-buttons')) return;
     $('save-buttons').innerHTML = state.data.companies.map((c) => {
-      const url = `${window.NIMBUS.newSnapshotUrl}?ticker=${encodeURIComponent(c.ticker)}&price=${c.last_price ?? ''}`;
-      return `<a class="chip accent" href="${url}">Save ${esc(companyLabel(c))} @ ${fmt.price(c.last_price)}</a>`;
+      // No price in the link: the server fetches the live price when the RM saves.
+      const url = `${window.NIMBUS.newSnapshotUrl}?ticker=${encodeURIComponent(c.ticker)}`;
+      return `<a class="chip accent" href="${url}">Save ${esc(companyLabel(c))}</a>`;
     }).join('');
   }
 
@@ -314,9 +431,14 @@
       $('valuation-table').innerHTML = '';
       $('template-desc').textContent = 'Open this section to load financial statements.';
       history.replaceState(null, '', `?tickers=${encodeURIComponent(d.companies.map((c) => c.ticker).join(','))}&period=${encodeURIComponent(period)}`);
+      // The Save form saves exactly the companies and period on screen.
+      $('save-tickers').value = d.companies.map((c) => c.ticker).join(',');
+      $('save-period').value = period;
       $('results').hidden = false;
       $('demo-banner').hidden = !d.demo_data;
       $('template-select').value = d.suggested_template;
+      // Started first so financials, ratings and news still load if a chart fails to draw.
+      loadBriefing(d.companies.map((c) => c.ticker).join(','));
       renderOverview();
       renderPriceChart();
       renderSummary();
@@ -329,6 +451,34 @@
     } finally {
       form.querySelector('button[type="submit"], button:not([type])').disabled = false;
     }
+  }
+
+  // ---------- saved discussion: draw everything from the snapshot ----------
+  function showSaved() {
+    state.data = SAVED.compare;
+    $('demo-banner').hidden = SAVED.data_source !== 'demo';
+    $('template-select').value = SAVED.compare.suggested_template || 'general';
+    const tickers = SAVED.compare.companies.map((c) => c.ticker).join(',');
+    loadBriefing(tickers);
+    renderOverview();
+    renderSummary();
+    renderCorrelation();
+    try { renderPriceChart(); } catch (e) { setStatus('The price chart could not be drawn: ' + e.message, true); }
+  }
+
+  if (SAVED) { showSaved(); return; }
+
+  // ---------- Save form ----------
+  const clientSelect = $('client-select');
+  if (clientSelect) {
+    const syncClient = () => { $('new-client').hidden = clientSelect.value !== '__new__'; };
+    clientSelect.addEventListener('change', syncClient);
+    syncClient();
+    // One click = one record: stop a double click from saving twice.
+    $('save-form').addEventListener('submit', () => {
+      $('save-button').disabled = true;
+      $('save-button').textContent = 'Saving…';
+    });
   }
 
   form.addEventListener('submit', (e) => { e.preventDefault(); run(); });

@@ -22,7 +22,8 @@
     <a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if ep == 'main.dashboard' }}">Dashboard</a>
     <a href="{{ url_for('main.compare') }}" class="{{ 'active' if ep == 'main.compare' }}">Compare</a>
     <a href="{{ url_for('main.clients') }}" class="{{ 'active' if ep.startswith('main.client') }}">Clients</a>
-    <a href="{{ url_for('main.snapshots') }}" class="{{ 'active' if ep.startswith('main.snapshot') }}">Discussions</a>
+    <a href="{{ url_for('main.discussions') }}" class="{{ 'active' if ep.startswith('main.discussion') }}">Discussions</a>
+    <a href="{{ url_for('main.snapshots') }}" class="{{ 'active' if ep.startswith('main.snapshot') }}">Stock notes</a>
   </nav>
   <div class="user">
     <span>{{ g.user.full_name }}</span>
@@ -41,7 +42,8 @@
   {% block content %}{% endblock %}
 </main>
 
-<footer class="footer">Nimbus RM · Market data from Yahoo Finance (may be delayed) · For internal discussion only, not investment advice.</footer>
+<footer class="footer">Nimbus RM · Market data from Yahoo Finance (may be delayed) · For internal discussion only, not investment advice.
+  {% if config.NIMBUS_INSTANCE_ID %}<div class="server-id">Server {{ config.NIMBUS_INSTANCE_ID }}{% if config.NIMBUS_COMMIT %} · commit {{ config.NIMBUS_COMMIT[:7] }}{% endif %}</div>{% endif %}</footer>
 {% block scripts %}{% endblock %}
 </body>
 </html>

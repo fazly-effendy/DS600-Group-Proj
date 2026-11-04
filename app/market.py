@@ -5,6 +5,9 @@ Two providers share one interface:
   * DemoProvider  - deterministic synthetic data, so the app always works
                     (offline, in tests, or when Yahoo rate-limits a cloud IP)
 
+News and analyst ratings come from app/news.py; the demo provider returns
+none of either (it never invents them).
+
 `MarketData` picks the provider, caches results in memory, and falls back to
 demo data when DEMO_FALLBACK is on. Every result carries a `source` field so
 the UI can tell the user when they are looking at demo data.
@@ -17,7 +20,9 @@ import math
 import random
 import threading
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+from .news import extract_analyst_view, extract_latest_ratings, fetch_news, parse_news
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +70,8 @@ def build_fundamental_rows(years: list[dict]) -> list[dict]:
             "year": y["year"],
             "revenue": rev,
             "net_income": _clean(y.get("net_income")),
+            "total_debt": _clean(y.get("total_debt")),
+            "equity": _clean(y.get("equity")),
             "revenue_growth": _safe_div((rev - prev_rev) if rev is not None and prev_rev is not None else None, abs(prev_rev) if prev_rev else None),
             "gross_margin": _safe_div(_clean(y.get("gross_profit")), rev),
             "net_margin": _safe_div(_clean(y.get("net_income")), rev),
@@ -175,6 +182,15 @@ class DemoProvider:
             assets *= 1 + rng.uniform(0.0, 0.08)
         return build_fundamental_rows(years)
 
+    # Demo mode never invents news or analyst opinions: they are left out and the page says so.
+    def news(self, ticker: str, name=None) -> dict:
+        return {"items": [], "skipped": 0, "status": "demo", "route": None,
+                "message": "Demo data mode: news is not shown, because Nimbus never invents headlines."}
+
+    def ratings(self, ticker: str) -> dict:
+        return {"counts": None, "view": None,
+                "message": "Demo data mode: analyst ratings are not shown, because Nimbus never invents them."}
+
 
 # --------------------------------------------------------------------------
 # Yahoo provider
@@ -245,6 +261,26 @@ class YahooProvider:
             years.append(entry)
         return build_fundamental_rows(years)
 
+    def news(self, ticker: str, name=None) -> dict:
+        """Up to 5 parsed articles; see app/news.py for the routes tried and the rules."""
+        raw = fetch_news(self.yf, ticker, name)
+        items, skipped = parse_news(raw["items"], limit=5)
+        return {**raw, "items": items, "skipped": skipped}
+
+    def ratings(self, ticker: str) -> dict:
+        t = self.yf.Ticker(ticker)
+        counts = view = None
+        problems = []
+        try:
+            counts = extract_latest_ratings(t.recommendations)
+        except Exception as exc:  # one part failing must not hide the other
+            problems.append(f"recommendations unavailable ({exc.__class__.__name__})")
+        try:
+            view = extract_analyst_view(t.info, None)  # upside is added by the API from the live price
+        except Exception as exc:
+            problems.append(f"price targets unavailable ({exc.__class__.__name__})")
+        return {"counts": counts, "view": view, "message": "; ".join(problems) or None}
+
 
 # --------------------------------------------------------------------------
 # Facade with caching + fallback
@@ -276,13 +312,18 @@ class MarketData:
 
     def _call(self, method: str, ticker: str, *args):
         def run():
+            # fetched_at records when the data was really fetched (results are cached),
+            # so a saved discussion can say how fresh its figures were.
+            fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             try:
-                return {"source": self.primary.name, "data": getattr(self.primary, method)(ticker, *args)}
+                data = getattr(self.primary, method)(ticker, *args)
+                return {"source": self.primary.name, "data": data, "fetched_at": fetched_at}
             except Exception as exc:  # network errors, rate limits, bad tickers
                 if self.primary is self.demo or not self.fallback:
                     raise MarketDataError(str(exc)) from exc
                 log.warning("Live %s failed for %s (%s); using demo data", method, ticker, exc)
-                return {"source": "demo", "data": getattr(self.demo, method)(ticker, *args)}
+                return {"source": "demo", "data": getattr(self.demo, method)(ticker, *args),
+                        "fetched_at": fetched_at}
 
         return self._cached((method, ticker, args), run)
 
@@ -294,6 +335,12 @@ class MarketData:
 
     def fundamentals(self, ticker):
         return self._call("fundamentals", ticker)
+
+    def news(self, ticker, name=None):
+        return self._call("news", ticker, name)
+
+    def ratings(self, ticker):
+        return self._call("ratings", ticker)
 
     def latest_price(self, ticker):
         res = self.history(ticker, "1mo")

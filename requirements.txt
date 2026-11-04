@@ -6,6 +6,8 @@ cryptography>=42
 yfinance>=0.2.40
 pandas>=2.1
 python-dotenv>=1.0
+tzdata  # time-zone data for Asia/Singapore on Windows
 boto3>=1.34,<2
 gunicorn>=22
 pytest>=8
+PyYAML>=6  # tests only: reads the CloudFormation template

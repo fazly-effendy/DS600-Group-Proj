@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Discussions{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Saved discussions</h1>
+    <p class="muted">Every saved comparison with its client interests. Search by client, company or date, then open one to see it exactly as it was saved.</p></div>
+  <div class="actions"><a class="btn primary" href="{{ url_for('main.compare') }}">+ New comparison</a></div>
+</div>
+
+<form class="card filters" method="get">
+  <label>Client
+    <select name="client_id">
+      <option value="">All clients</option>
+      {% for c in clients %}<option value="{{ c.id }}" {{ 'selected' if args.get('client_id') == c.id|string }}>{{ c.label }}</option>{% endfor %}
+    </select></label>
+  <label class="grow">Company <input name="company" value="{{ args.get('company','') }}" placeholder="Ticker or name, e.g. AAPL or apple"></label>
+  <label>From <input type="date" name="date_from" value="{{ args.get('date_from','') }}"></label>
+  <label>To <input type="date" name="date_to" value="{{ args.get('date_to','') }}"></label>
+  <div class="filter-actions">
+    <button class="btn primary">Search</button>
+    <a class="btn" href="{{ url_for('main.discussions') }}">Reset</a>
+  </div>
+</form>
+
+{% if rows %}
+<div class="card table-wrap">
+  <table class="table">
+    <thead><tr><th>Date</th><th>Client</th><th>Companies (price at discussion)</th><th>Client interests</th><th></th></tr></thead>
+    <tbody>
+    {% for d in rows %}
+      <tr>
+        <td class="nowrap">{{ d.discussed_on.strftime('%d %b %Y') }}</td>
+        <td><a href="{{ url_for('main.client_detail', client_id=d.client_id) }}">{{ d.client.name }}</a><div class="muted small mono">{{ d.client.client_code }}</div></td>
+        <td>
+          {% for c in d.companies %}<div><span class="ticker">{{ c.ticker }}</span>
+            <span class="mono small">{% if c.stock_price is not none %}{{ c.currency }} {{ c.stock_price|money }}{% else %}—{% endif %}</span></div>{% endfor %}
+          {% if d.is_demo %}<div class="source small demo">Demo data</div>{% endif %}
+        </td>
+        <td class="clip">{{ d.client_interests|truncate(140) }}</td>
+        <td class="nowrap"><a class="btn" href="{{ url_for('main.discussion_detail', discussion_id=d.id) }}">Open</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty card">
+  <p>No saved discussions match.</p>
+  <a class="btn primary" href="{{ url_for('main.compare') }}">Compare companies and save a discussion</a>
+</div>
+{% endif %}
+{% endblock %}

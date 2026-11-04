@@ -55,19 +55,35 @@ def health():
     return jsonify({"status": "ok" if db_ok else "degraded", "database": db_ok}), (200 if db_ok else 503)
 
 
-@bp.route("/compare")
-@login_required
-def compare():
-    tickers = _require_tickers(min_n=2)
-    period = request.args.get("period", "1y")
+class Sources:
+    """Collects where each piece of market data came from and when it was fetched."""
+
+    def __init__(self):
+        self.names, self.times = set(), []
+
+    def add(self, result):
+        self.names.add(result["source"])
+        if result.get("fetched_at"):
+            self.times.append(result["fetched_at"])
+        return result
+
+    @property
+    def demo(self):
+        return "demo" in self.names
+
+
+def validate_period(period):
     if period not in PERIODS:
         raise ValueError(f"Period must be one of {', '.join(PERIODS)}.")
+    return period
 
-    companies, raw_series, sources = [], {}, set()
+
+def comparison_payload(tickers, period, sources):
+    """Price performance side by side (also used when a discussion is saved)."""
+    companies, raw_series = [], {}
     for t in tickers:
-        info = market().info(t)
-        hist = market().history(t, period)
-        sources.update({info["source"], hist["source"]})
+        info = sources.add(market().info(t))
+        hist = sources.add(market().history(t, period))
         series = hist["data"]
         raw_series[t] = series
         companies.append({
@@ -77,14 +93,21 @@ def compare():
             "rebased": rebase(series),
             "prices": series,
         })
-
-    return jsonify({
+    return {
         "period": period,
         "companies": companies,
         "correlation": correlation_matrix(raw_series),
         "suggested_template": suggest_template([c["sector"] for c in companies]),
-        "demo_data": "demo" in sources,
-    })
+        "demo_data": sources.demo,
+    }
+
+
+@bp.route("/compare")
+@login_required
+def compare():
+    tickers = _require_tickers(min_n=2)
+    period = validate_period(request.args.get("period", "1y"))
+    return jsonify(comparison_payload(tickers, period, Sources()))
 
 
 @bp.route("/fundamentals")
@@ -108,6 +131,83 @@ def fundamentals():
             "trend": fund["data"],
         })
     return jsonify({"template": tpl, "companies": out, "demo_data": "demo" in sources})
+
+
+FINANCIAL_KEYS = ("year", "revenue", "net_income", "total_debt", "equity",
+                  "revenue_growth", "net_margin", "debt_to_equity")
+
+
+def _latest_financials(ticker, sources, trends=None):
+    """Latest fiscal year's statement lines plus the core ratios Gaurav asked for.
+
+    If `trends` is a dict, every year's rows are kept in it too (for the saved snapshot).
+    """
+    try:
+        fund = sources.add(market().fundamentals(ticker))
+    except MarketDataError as exc:
+        return {"error": str(exc)}
+    rows = fund["data"] or []
+    if trends is not None:
+        trends[ticker] = rows
+    if not rows:
+        return {"error": "No financial statements available."}
+    latest = rows[-1]
+    return {**{k: latest.get(k) for k in FINANCIAL_KEYS}, "source": fund["source"]}
+
+
+def _ratings(ticker, sources):
+    try:
+        res = sources.add(market().ratings(ticker))
+    except MarketDataError as exc:
+        return {"counts": None, "view": None, "message": str(exc), "source": None}
+    data = res["data"]
+    view = dict(data["view"]) if data.get("view") else None
+    # Upside needs a live price; it is never computed from demo prices.
+    if view and view.get("target_mean") and res["source"] != "demo":
+        try:
+            px = market().latest_price(ticker)
+            if px["source"] != "demo" and px["price"]:
+                view["upside"] = view["target_mean"] / px["price"] - 1
+                view["price_used"] = px["price"]
+        except MarketDataError:
+            pass
+    return {"counts": data.get("counts"), "view": view, "message": data.get("message"), "source": res["source"]}
+
+
+def _news(ticker, name, sources):
+    try:
+        res = sources.add(market().news(ticker, name))
+    except MarketDataError as exc:
+        return {"items": [], "status": "error", "message": str(exc), "route": None, "source": None}
+    return {**res["data"], "source": res["source"]}
+
+
+def briefing_payload(tickers, sources, trends=None):
+    """Feature 1: key financials, analyst ratings and sourced news for each company.
+
+    Each part is fetched separately, so one failing part never hides the others.
+    """
+    companies = []
+    for t in tickers:
+        company = {"ticker": t, "name": t, "sector": None, "currency": None, "is_bank": False}
+        try:
+            info = sources.add(market().info(t))
+            data = info["data"]
+            company.update(name=data["name"], sector=data["sector"], currency=data["currency"],
+                           is_bank=data["sector"] == "Financial Services")
+        except MarketDataError as exc:
+            company["error"] = str(exc)
+        company["financials"] = _latest_financials(t, sources, trends)
+        company["ratings"] = _ratings(t, sources)
+        company["news"] = _news(t, company["name"], sources)
+        companies.append(company)
+    return {"companies": companies, "demo_data": sources.demo}
+
+
+@bp.route("/briefing")
+@login_required
+def briefing():
+    return jsonify(briefing_payload(_require_tickers(min_n=1), Sources()))
 
 
 @bp.route("/templates")

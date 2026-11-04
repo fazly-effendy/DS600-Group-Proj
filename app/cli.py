@@ -1,13 +1,14 @@
 """Command-line helpers:  flask --app wsgi <command>"""
 import random
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 import click
 from flask import current_app
 
 from .market import DemoProvider
-from .models import Client, Snapshot, User, db
+from .models import Client, Snapshot, User, db, upgrade_schema
+from .timeutil import local_today
 
 
 def register_cli(app):
@@ -15,6 +16,8 @@ def register_cli(app):
     def init_db():
         """Create all tables (safe to run more than once)."""
         db.create_all()
+        for col in upgrade_schema():
+            click.echo(f"Added column {col}.")
         click.echo("Database tables are ready.")
 
     @app.cli.command("archive-snapshots")
@@ -29,9 +32,14 @@ def register_cli(app):
 
         from .archive import archive_snapshots
 
+        from .archive import ARCHIVE_LOCK, run_exclusively
+
         client = boto3.client("s3")
-        count = archive_snapshots(bucket, client, years=years)
-        click.echo(f"Archived and removed {count} discussion snapshot(s).")
+        count = run_exclusively(ARCHIVE_LOCK, lambda: archive_snapshots(bucket, client, years=years))
+        if count is None:
+            click.echo("Another server is already archiving; skipped.")
+        else:
+            click.echo(f"Archived and removed {count} discussion snapshot(s).")
 
     @app.cli.command("create-user")
     @click.argument("username")
@@ -88,10 +96,10 @@ def register_cli(app):
                 db.session.add(Snapshot(
                     rm_id=user.id, client_id=client.id, ticker=ticker,
                     company_name=demo.info(ticker)["name"], currency=demo.info(ticker)["currency"],
-                    price_at_discussion=Decimal(str(price)),
-                    discussed_on=date.today() - timedelta(days=days_ago),
+                    price_at_discussion=Decimal(str(price)), price_source="demo",
+                    discussed_on=local_today() - timedelta(days=days_ago),
                     interest_level=rng.choice(Snapshot.INTEREST_LEVELS), tags=tags, notes=note,
-                    follow_up_on=date.today() + timedelta(days=rng.randint(-5, 30)) if rng.random() < 0.6 else None,
+                    follow_up_on=local_today() + timedelta(days=rng.randint(-5, 30)) if rng.random() < 0.6 else None,
                 ))
         db.session.commit()
         click.echo(f"Demo data ready. Log in as '{username}' / '{password}'.")
