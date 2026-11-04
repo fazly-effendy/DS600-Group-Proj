@@ -50,6 +50,12 @@
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <input type="hidden" name="tickers" id="save-tickers" value="{{ initial }}">
       <input type="hidden" name="period" id="save-period" value="{{ initial_period }}">
+      {# Filled by compare.js: the exact figures shown, signed by the server, and a one-time ID for this Save. #}
+      <input type="hidden" name="compare_json" id="save-compare-json">
+      <input type="hidden" name="compare_sig" id="save-compare-sig">
+      <input type="hidden" name="briefing_json" id="save-briefing-json">
+      <input type="hidden" name="briefing_sig" id="save-briefing-sig">
+      <input type="hidden" name="submission_id" id="save-submission-id">
       <div class="form-row">
         <label>Client
           <select name="client_id" id="client-select" required>

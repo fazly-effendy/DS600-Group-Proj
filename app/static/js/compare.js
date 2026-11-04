@@ -10,7 +10,8 @@
   const form = $('compare-form');
   const savedEl = $('saved-discussion');
   const SAVED = savedEl ? JSON.parse(savedEl.textContent) : null;
-  const state = { data: null, mode: 'rebased', charts: [], fundamentalsLoaded: false };
+  const state = { data: null, mode: 'rebased', charts: [], fundamentalsLoaded: false,
+                  run: 0, shown: { compare: null, briefing: null } };
 
   // ---------- formatting ----------
   const fmt = {
@@ -45,6 +46,20 @@
     if (!r.ok) throw new Error(d.error || `Request failed (${r.status})`);
     return d;
   }
+
+  // The exact response text and the server's signature, so Save can send back what was shown.
+  async function getSigned(url) {
+    const r = await fetch(url, { headers: { Accept: 'application/json' } });
+    const text = await r.text();
+    let d = {};
+    try { d = JSON.parse(text); } catch (_) { /* not JSON */ }
+    if (!r.ok) throw new Error(d.error || `Request failed (${r.status})`);
+    return { data: d, text, sig: r.headers.get('X-Nimbus-Signature') };
+  }
+
+  const newSubmissionId = () => (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 14)}`;
 
   function destroyCharts() { state.charts.forEach((c) => c.destroy()); state.charts = []; }
 
@@ -306,7 +321,16 @@
     status.textContent = 'Loading financials, analyst ratings and news…';
     ['financials-table', 'ratings-table', 'news-list'].forEach((id) => { $(id).innerHTML = ''; });
     try {
-      const d = SAVED ? SAVED.briefing : await getJSON(`/api/briefing?tickers=${encodeURIComponent(tickers)}`);
+      let d;
+      if (SAVED) {
+        d = SAVED.briefing;
+      } else {
+        const run = state.run;
+        const res = await getSigned(`/api/briefing?tickers=${encodeURIComponent(tickers)}`);
+        if (run !== state.run) return;  // a newer comparison has started; ignore this answer
+        state.shown.briefing = res;
+        d = res.data;
+      }
       if (d.demo_data) $('demo-banner').hidden = false;
       renderFinancials(d.companies);
       renderRatings(d.companies);
@@ -423,8 +447,13 @@
     $('results').hidden = true;
     form.querySelector('button[type="submit"], button:not([type])').disabled = true;
     try {
-      const d = await getJSON(`/api/compare?tickers=${encodeURIComponent(tickers)}&period=${period}`);
+      state.run += 1;
+      state.shown = { compare: null, briefing: null };
+      const res = await getSigned(`/api/compare?tickers=${encodeURIComponent(tickers)}&period=${period}`);
+      const d = res.data;
+      state.shown.compare = res;
       state.data = d;
+      $('save-submission-id').value = newSubmissionId();  // one ID per comparison shown
       state.fundamentalsLoaded = false;
       destroyCharts();
       $('trend-charts').innerHTML = '';
@@ -474,8 +503,19 @@
     const syncClient = () => { $('new-client').hidden = clientSelect.value !== '__new__'; };
     clientSelect.addEventListener('change', syncClient);
     syncClient();
-    // One click = one record: stop a double click from saving twice.
-    $('save-form').addEventListener('submit', () => {
+    // Save sends the exact figures on screen (signed by the server) and a one-time ID,
+    // so the record equals the screen and one click is stored once.
+    $('save-form').addEventListener('submit', (e) => {
+      const { compare, briefing } = state.shown;
+      if (!compare || !briefing) {
+        e.preventDefault();
+        setStatus('Wait for "Financials, ratings & news" to finish loading, then save.', true);
+        return;
+      }
+      $('save-compare-json').value = compare.text;
+      $('save-compare-sig').value = compare.sig || '';
+      $('save-briefing-json').value = briefing.text;
+      $('save-briefing-sig').value = briefing.sig || '';
       $('save-button').disabled = true;
       $('save-button').textContent = 'Saving…';
     });

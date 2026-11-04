@@ -54,6 +54,8 @@ class Config:
     SESSION_COOKIE_SECURE = _bool("SESSION_COOKIE_SECURE", False)
     SESSION_COOKIE_SAMESITE = "Lax"
     MAX_COMPARE_TICKERS = 5
+    # The Save form carries the comparison shown on screen: up to ~0.5 MB for 5 companies over 5 years.
+    MAX_FORM_MEMORY_SIZE = 4 * 1024 * 1024
 
     # Set by the CloudFormation user data; shown in the footer so you can tell which
     # server answered and which commit it runs (empty when running locally).

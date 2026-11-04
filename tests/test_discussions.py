@@ -76,12 +76,26 @@ def login(app, username="rm1", create=True):
     return c
 
 
-def save(client, **overrides):
+def shown_payloads(client, tickers="AAPL,MSFT", period="1y"):
+    """What the Compare page receives: the two signed API responses, exactly as sent."""
+    r1 = client.get("/api/compare", query_string={"tickers": tickers, "period": period})
+    r2 = client.get("/api/briefing", query_string={"tickers": tickers})
+    if r1.status_code != 200 or r2.status_code != 200:
+        return {}
+    return {"compare_json": r1.get_data(as_text=True), "compare_sig": r1.headers["X-Nimbus-Signature"],
+            "briefing_json": r2.get_data(as_text=True), "briefing_sig": r2.headers["X-Nimbus-Signature"]}
+
+
+def save(client, payloads=None, **overrides):
+    """Submit the Save form as the Compare page does, with the figures it showed."""
     data = {"tickers": "AAPL,MSFT", "period": "1y", "client_id": "__new__",
             "new_client_code": "C-1001", "new_client_name": "Fictional Client One",
             "discussed_on": "2026-11-03", "client_interests": "Dividend income; worried about AI valuations",
             "notes": "Prefers quarterly reviews.", "follow_up_on": "2026-12-01"}
     data.update(overrides)
+    if payloads is None:
+        payloads = shown_payloads(client, data["tickers"], data["period"])
+    data.update(payloads)
     return client.post("/discussions", data=data)
 
 
@@ -346,3 +360,133 @@ def test_dates_and_times_follow_singapore_time(monkeypatch):
         db.session.commit()
     page = rm.get(f"/discussions/{did}").data
     assert b"04 Nov 2026, 03:47 SGT" in page and b"UTC" not in page
+
+
+
+# --------------------------------------------------------------------------
+# Several servers behind the load balancer (found on AWS, 5 Nov 2026)
+# --------------------------------------------------------------------------
+class OtherServerFake(LiveFake):
+    """A second server whose cache holds slightly different prices (fetched at another moment)."""
+
+    def history(self, t, period):
+        return [(d, round(p * 1.0137, 4)) for d, p in super().history(t, period)]
+
+
+def two_servers(tmp_path):
+    uri = f"sqlite:///{tmp_path / 'shared.db'}"
+    a = make_app(uri)
+    b = make_app(uri, live=False)
+    b.extensions["market"].primary = OtherServerFake()
+    return a, login(a), b, login(b)
+
+
+def test_save_stores_exactly_what_was_shown_even_when_another_server_saves(tmp_path):
+    """On AWS the Compare page came from one server and the Save went to another, which fetched
+    fresh prices: AAPL showed 351.26 but 351.74 was saved."""
+    a, rm_a, b, rm_b = two_servers(tmp_path)
+    shown = shown_payloads(rm_a)
+    shown_prices = {c["ticker"]: c["last_price"] for c in json.loads(shown["compare_json"])["companies"]}
+    other_prices = {c["ticker"]: c["last_price"]
+                    for c in rm_b.get("/api/compare?tickers=AAPL,MSFT&period=1y").get_json()["companies"]}
+    assert shown_prices != other_prices
+    did = discussion_id(save(rm_b, payloads=shown))
+    with b.app_context():
+        saved = {c.ticker: float(c.stock_price) for c in db.session.get(Discussion, did).companies}
+    assert saved == pytest.approx(shown_prices)
+
+
+def test_saving_makes_no_market_data_calls():
+    app = make_app()
+    rm = login(app)
+    shown = shown_payloads(rm)
+    app.extensions["market"] = NoMarket()
+    did = discussion_id(save(rm, payloads=shown))
+    with app.app_context():
+        assert db.session.get(Discussion, did) is not None
+
+
+@pytest.mark.parametrize("tamper", [
+    lambda p: {**p, "compare_json": p["compare_json"].replace('"last_price":', '"last_price":1', 1)},
+    lambda p: {**p, "briefing_sig": "0" * 64},
+    lambda p: {k: v for k, v in p.items() if not k.startswith("compare")},
+    lambda p: {},
+])
+def test_unverified_or_missing_figures_are_refused(tamper):
+    app = make_app()
+    rm = login(app)
+    r = save(rm, payloads=tamper(shown_payloads(rm)))
+    assert b"compare again" in rm.get(r.headers["Location"]).data.lower()
+    with app.app_context():
+        assert Discussion.query.count() == 0 and Client.query.count() == 0
+
+
+def test_figures_for_other_companies_are_refused():
+    app = make_app()
+    rm = login(app)
+    r = save(rm, payloads=shown_payloads(rm, "KO,WMT"))  # form says AAPL,MSFT
+    assert b"compare again" in rm.get(r.headers["Location"]).data.lower()
+    with app.app_context():
+        assert Discussion.query.count() == 0
+
+
+def test_one_click_is_saved_once_even_if_the_request_arrives_twice():
+    """On AWS one click produced two identical discussions (a repeated request)."""
+    app = make_app()
+    rm = login(app)
+    shown = shown_payloads(rm)
+    first = discussion_id(save(rm, payloads=shown, submission_id="7f9c2b1e-0d4a-4c55-9a1e-3b8f6d2c1a00"))
+    second = save(rm, payloads=shown, submission_id="7f9c2b1e-0d4a-4c55-9a1e-3b8f6d2c1a00")
+    assert discussion_id(second) == first
+    assert b"already saved" in rm.get(second.headers["Location"]).data
+    with app.app_context():
+        assert Discussion.query.count() == 1 and Client.query.count() == 1
+    # A new Compare run gets a new submission ID and saves a second discussion.
+    other = discussion_id(save(rm, payloads=shown, client_id="1", submission_id="0b3d5e7f-1111-4222-8333-944455556666"))
+    assert other != first
+
+
+def test_submission_ids_are_unique_per_rm_on_mysql():
+    ddl = str(CreateTable(Discussion.__table__).compile(dialect=mysql.dialect()))
+    assert "UNIQUE (rm_id, submission_id)" in ddl
+
+
+def test_compare_page_sends_what_it_showed():
+    js = open("app/static/js/compare.js").read()
+    page_fields = ("compare_json", "compare_sig", "briefing_json", "briefing_sig", "submission_id")
+    app = make_app()
+    page = login(app).get("/compare").data.decode()
+    for field in page_fields:
+        assert f'name="{field}"' in page, field
+    assert "X-Nimbus-Signature" in js and "randomUUID" in js
+
+
+def test_large_comparisons_fit_the_form_limit():
+    from app.config import Config
+    assert Config.MAX_FORM_MEMORY_SIZE >= 2 * 1024 * 1024
+    nginx = open("deploy/nginx-cloudfront.conf").read()
+    assert "client_max_body_size 4m;" in nginx
+
+
+def test_simultaneous_copies_of_one_click_are_saved_once(monkeypatch):
+    """Both copies pass the 'already saved?' check at the same moment; the database's
+    unique (rm_id, submission_id) rule stops the second, which then shows the first."""
+    from app import discussions
+
+    app = make_app()
+    rm = login(app)
+    shown = shown_payloads(rm)
+    sid = "3c1e9a77-5b2d-4f0e-8a64-0d9b7e215c42"
+    first = discussion_id(save(rm, payloads=shown, submission_id=sid))
+    real = discussions._already_saved
+    calls = []
+
+    def blind_first_check(submission_id):  # the second copy's first check ran before the first commit
+        calls.append(submission_id)
+        return None if len(calls) == 1 else real(submission_id)
+
+    monkeypatch.setattr(discussions, "_already_saved", blind_first_check)
+    second = save(rm, payloads=shown, submission_id=sid, client_id="1")
+    assert discussion_id(second) == first
+    with app.app_context():
+        assert Discussion.query.count() == 1

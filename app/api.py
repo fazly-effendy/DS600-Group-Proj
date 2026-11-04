@@ -7,6 +7,7 @@ from .auth import login_required
 from .industry import TEMPLATES, suggest_template, template_payload
 from .market import MarketDataError, PERIODS, correlation_matrix, performance_stats, rebase
 from .models import Client, Snapshot, db
+from .signing import signed_json_response
 
 bp = Blueprint("api", __name__)
 
@@ -102,12 +103,19 @@ def comparison_payload(tickers, period, sources):
     }
 
 
+def _with_retrieved_at(payload, sources):
+    payload["retrieved_at"] = min(sources.times) if sources.times else None
+    return payload
+
+
 @bp.route("/compare")
 @login_required
 def compare():
     tickers = _require_tickers(min_n=2)
     period = validate_period(request.args.get("period", "1y"))
-    return jsonify(comparison_payload(tickers, period, Sources()))
+    sources = Sources()
+    # Signed, so the Save form can send back exactly these figures (see app/signing.py).
+    return signed_json_response(_with_retrieved_at(comparison_payload(tickers, period, sources), sources))
 
 
 @bp.route("/fundamentals")
@@ -207,7 +215,10 @@ def briefing_payload(tickers, sources, trends=None):
 @bp.route("/briefing")
 @login_required
 def briefing():
-    return jsonify(briefing_payload(_require_tickers(min_n=1), Sources()))
+    sources, trends = Sources(), {}
+    payload = briefing_payload(_require_tickers(min_n=1), sources, trends)
+    payload["trends"] = trends  # yearly rows, kept with a saved discussion for its trend charts
+    return signed_json_response(_with_retrieved_at(payload, sources))
 
 
 @bp.route("/templates")

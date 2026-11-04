@@ -1,29 +1,36 @@
 """Client-discussion snapshots (Features 3–5).
 
 * Save: one Save on the Compare page stores the whole comparison for a client,
-  with the client's interests and the RM's notes. Market data is rebuilt from the
-  same 15-minute cache the page used, so the saved figures are the ones shown.
+  with the client's interests and the RM's notes. The page sends back the exact
+  figures it showed, signed by the server (app/signing.py), so the saved record
+  equals the screen even when another server handles the Save, and nothing is
+  fetched again. A one-time submission ID stops a repeated request from saving twice.
 * Search: by client, by company (ticker or name) and by date, using SQL on the
   discussions and discussion_companies tables (Amazon RDS on AWS).
 * Reopen: shows the saved snapshot read-only. It never calls market data, so a
   historical discussion is never mixed with today's prices.
 """
 import json
+import re
+import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
 from flask import abort, current_app, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
-from .api import Sources, briefing_payload, comparison_payload, parse_tickers, validate_period
+from .api import parse_tickers, validate_period
 from .auth import login_required
 from .industry import TEMPLATES, template_payload
-from .market import MarketDataError
 from .models import Client, Discussion, DiscussionCompany, db
+from .signing import verify_text
 from .routes import _create_client_from_form, _own_client, _parse_date, bp
 from .timeutil import local_today
 
 SNAPSHOT_VERSION = 1
+SUBMISSION_ID_RE = re.compile(r"[A-Za-z0-9-]{8,64}")
+COMPARE_AGAIN = "Run Compare again, then save."
 
 
 class SaveError(Exception):
@@ -57,8 +64,24 @@ def _client_from_form(form):
     return _own_client(client_id)  # 404 if it is another RM's client
 
 
+def _shown_figures(form, tickers, period):
+    """The comparison and briefing exactly as the page showed them, after checking the server's signature."""
+    texts = {}
+    for part in ("compare", "briefing"):
+        text, sig = form.get(f"{part}_json", ""), form.get(f"{part}_sig", "")
+        if not verify_text(text, sig):
+            raise SaveError("The figures on screen could not be verified, so nothing was saved. " + COMPARE_AGAIN)
+        texts[part] = text
+    comparison, briefing = json.loads(texts["compare"]), json.loads(texts["briefing"])
+    if ([c.get("ticker") for c in comparison.get("companies", [])] != tickers
+            or [c.get("ticker") for c in briefing.get("companies", [])] != tickers
+            or comparison.get("period") != period):
+        raise SaveError("The figures on screen are for different companies or a different period. " + COMPARE_AGAIN)
+    return comparison, briefing
+
+
 def build_discussion(form):
-    """Validate the form, rebuild the comparison and return an unsaved Discussion."""
+    """Validate the form and the figures shown, and return an unsaved Discussion."""
     try:
         tickers = parse_tickers(form.get("tickers", ""))
         period = validate_period(form.get("period", "1y"))
@@ -72,22 +95,20 @@ def build_discussion(form):
     interests = form.get("client_interests", "").strip()
     if not interests:
         raise SaveError("Enter the client interests discussed; they are required for the record.")
-    client = _client_from_form(form)
 
-    sources, trends = Sources(), {}
-    try:
-        comparison = comparison_payload(tickers, period, sources)
-        briefing = briefing_payload(tickers, sources, trends)
-    except MarketDataError as exc:
-        raise SaveError(f"Could not load market data ({exc}). Nothing was saved.") from None
+    comparison, briefing = _shown_figures(form, tickers, period)
+    client = _client_from_form(form)  # only after the figures are verified: no stray new client
 
     demo_mode = current_app.config["MARKET_DATA_PROVIDER"] == "demo"
-    if sources.demo and not demo_mode:
+    shown_demo = bool(comparison.get("demo_data") or briefing.get("demo_data"))
+    if shown_demo and not demo_mode:
         raise SaveError("Live market data is not available right now (Yahoo Finance did not respond), "
                         "so this comparison was not saved: demo figures are never stored in a client "
                         "record. Try again in a few minutes.")
-    data_source = "demo" if sources.demo else "yahoo"
-    retrieved_at = min(sources.times) if sources.times else None
+    data_source = "demo" if shown_demo else "yahoo"
+    times = [t for t in (comparison.pop("retrieved_at", None), briefing.pop("retrieved_at", None)) if t]
+    retrieved_at = min(times) if times else None
+    trends = briefing.pop("trends", {}) or {}
 
     snapshot = {
         "version": SNAPSHOT_VERSION,
@@ -130,18 +151,44 @@ def build_discussion(form):
     return discussion
 
 
+def _already_saved(submission_id):
+    return Discussion.query.filter_by(rm_id=g.user.id, submission_id=submission_id).first()
+
+
+def _show_existing(existing):
+    flash("This discussion was already saved; showing the saved record.", "info")
+    return redirect(url_for("main.discussion_detail", discussion_id=existing.id))
+
+
 @bp.route("/discussions", methods=["POST"])
 @login_required
 def discussion_save():
+    submission_id = request.form.get("submission_id", "").strip()
+    if not SUBMISSION_ID_RE.fullmatch(submission_id):
+        submission_id = uuid.uuid4().hex  # no ID from the page: save, without duplicate protection
+    existing = _already_saved(submission_id)
+    if existing:  # the same click arrived again (e.g. a retried request)
+        return _show_existing(existing)
     try:
         discussion = build_discussion(request.form)
     except SaveError as exc:
-        db.session.rollback()  # e.g. a new client added before the market data failed
+        db.session.rollback()
         flash(str(exc), "error")
         return redirect(url_for("main.compare", tickers=request.form.get("tickers", ""),
                                 period=request.form.get("period", "1y")))
+    discussion.submission_id = submission_id
     db.session.add(discussion)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Two copies of the same request on two servers at the same moment: the other one won.
+        db.session.rollback()
+        existing = _already_saved(submission_id)
+        if existing:
+            return _show_existing(existing)
+        flash("The discussion could not be saved (a client with that code was just created). " + COMPARE_AGAIN, "error")
+        return redirect(url_for("main.compare", tickers=request.form.get("tickers", ""),
+                                period=request.form.get("period", "1y")))
     flash(f"Saved the discussion with {discussion.client.label}. This is the record as saved; "
           "reopening it never fetches new data.", "success")
     return redirect(url_for("main.discussion_detail", discussion_id=discussion.id))
