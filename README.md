@@ -104,6 +104,8 @@ DS600-Group-Proj/
 │   ├── nimbus.service     # systemd unit for Gunicorn
 │   ├── nimbus-archive.service # systemd service for snapshot archiving
 │   └── nimbus-archive.timer # Monthly archive schedule
+├── scripts/
+│   └── load_test.py       # Sends load from a laptop to trigger auto scaling (evidence)
 ├── docs/
 │   ├── CLOUDFRONT_SANDBOX.md # Sandbox deployment steps, rationale, considerations
 │   ├── AWS_ACADEMY_SANDBOX_LIMITATIONS.txt # AWS Academy lab restrictions and access instructions
@@ -192,6 +194,7 @@ This is also Gaurav's acceptance test, in order:
 
 - **HTTPS** — CloudFront serves HTTPS with its default certificate; the hop from CloudFront to the load balancer is HTTP inside AWS, protected by the secret origin header. A custom domain with an AWS Certificate Manager certificate is not possible in the sandbox.
 - **Secrets** — the database password is passed as a CloudFormation parameter. In production it should come from AWS Secrets Manager.
+- **Sandbox resets** — the AWS Academy sandbox deletes every resource, including the database, when the session ends. The stack is created fresh at the start of each session (about 15 minutes), so saved discussions last only for that session. In a normal AWS account they would persist.
 - **Availability** — the servers scale across two Availability Zones, but the database is single-AZ (the sandbox does not support RDS Multi-AZ) and is deleted with the stack.
 - **Scaling speed** — a new server takes about 6–9 minutes to install the app, and target tracking removes servers only after about 15 minutes of low load, so scaling is visible in minutes, not seconds.
 - **Per-server memory** — each server caches market data for 15 minutes in its own memory, so two servers may briefly fetch the same figures. Saved discussions are never affected: they live in RDS.

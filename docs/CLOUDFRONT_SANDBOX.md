@@ -1,5 +1,7 @@
 # Nimbus RM on the AWS Academy sandbox
 
+> **The sandbox deletes everything when its session ends**: the stack, the database and every saved discussion. Plan each AWS task (demo, evidence recording, presentation) to fit inside **one** session, and create the stack fresh at the start. Creation took 13–16 minutes in our runs.
+
 One CloudFormation stack, [`infra/nimbus-merged-stack.yaml`](../infra/nimbus-merged-stack.yaml), creates the network, a load balancer, an Auto Scaling group of application servers, the private RDS database and the CloudFront distribution. It targets the AWS Academy sandbox described in [`AWS_ACADEMY_SANDBOX_LIMITATIONS.txt`](AWS_ACADEMY_SANDBOX_LIMITATIONS.txt) and must be deployed in **us-east-1**.
 
 ## Architecture
@@ -41,30 +43,46 @@ CloudFront provides HTTPS at its generated `*.cloudfront.net` hostname, so no do
 
 **Update stack → Use current template** → change only **GitCommit** → submit.
 
-The launch template gets a new version, and the Auto Scaling group replaces the servers **one at a time**: it starts a server with the new commit, waits for its success signal, then removes an old one. The load balancer keeps sending traffic to healthy servers throughout, and the database is not touched. When the update completes, the footer shows the new commit.
+The launch template gets a new version, and the Auto Scaling group replaces the servers **one at a time**: it starts a server with the new commit, waits for its success signal, then removes an old one. (While it does this, CloudFormation temporarily raises the group's minimum to 2; it returns to 1 afterwards.) The load balancer keeps sending traffic to healthy servers throughout, and the database is not touched. When the update completes, the footer shows the new commit.
 
 **Never delete the stack to redeploy:** RDS has `DeletionPolicy: Delete`, so deleting the stack deletes every saved discussion.
 
 ## Recording the Feature 6 scaling evidence
 
-The instructor accepts recorded evidence kept in the repository (decision D-02). Save everything in `docs/evidence/<date>-scaling/`, with a `README.md` naming the stack's **DeployedCommit** output.
+The instructor accepts recorded evidence kept in the repository (decision D-02). Save everything in `docs/evidence/<date>-scaling/`, with a `README.md` naming the stack's **DeployedCommit** output. Because the sandbox is wiped at the end of the session, **do all of this in the same session as creating the stack**, and keep the steps moving.
+
+| Step | Typical time |
+|---|---|
+| Create the stack | 15 min |
+| Register, save one discussion | 5 min |
+| Load until 2–3 servers are healthy | 10–15 min |
+| Reopen the discussion from two servers | 5 min |
+| Stop load, wait for scale-in | 15–25 min |
+| **Total** | **about 60–70 min** (start with at least 90 min on the session timer) |
 
 1. **Before:** screenshot **EC2 → Auto Scaling groups → (AutoScalingGroupName output)**: *Desired 1, Min 1, Max 3*, and the **Automatic scaling** tab showing both target-tracking policies.
 2. **Save a discussion** in the app (Compare two companies → Save this discussion) and note the footer's server ID.
-3. **Generate load** from **CloudShell** (top bar of the console), replacing the URL with your ApplicationURL:
+3. **Generate load from your laptop**, not CloudShell. CloudShell ends its session after about 15 minutes without a keypress, which stops anything running in it. In the project folder, with the virtual environment active:
 
    ```bash
-   URL=https://dxxxxxxxxxxxx.cloudfront.net/login
-   for i in $(seq 1 20); do
-     ( end=$((SECONDS+900)); while [ $SECONDS -lt $end ]; do curl -s -o /dev/null "$URL"; done ) &
-   done; wait
+   python scripts/load_test.py https://dxxxxxxxxxxxx.cloudfront.net --minutes 20
    ```
 
-   This sends roughly 20–40 requests per second for 15 minutes, well above the 300 requests per server per minute target.
-4. **Scale-out:** within about 3–5 minutes the request alarm goes into *In alarm* (CloudWatch → Alarms, names start with `TargetTracking-`). The group's **Activity** tab shows *Launching a new EC2 instance*, and **Instance management** shows 2–3 instances. **Target groups → Targets** shows them becoming *healthy* (6–9 minutes each). Screenshot each.
+   It sends thousands of requests per minute (well above the 300 requests per server per minute target) and prints, every 30 seconds, the request rate, the responses, and which servers answered. Keep its output for the evidence README.
+4. **Scale-out:** within about 3–5 minutes the request alarm goes into *In alarm* (CloudWatch → Alarms, names start with `TargetTracking-`). The group's **Activity** tab shows *Launching a new EC2 instance*, and **Instance management** shows 2–3 instances. **Target groups → Targets** shows them becoming *healthy* (5–9 minutes each). The load script's "servers" list grows at the same time. Screenshot each.
 5. **Any server reopens any discussion:** while two or more servers are healthy, open **Discussions → Open** on the saved discussion and reload a few times. The footer's server ID changes while the record stays identical. Screenshot two different server IDs with the same record.
 6. **Scale-in:** stop the load (Ctrl+C, or let it finish). About 15 minutes later the low-load alarm fires and the Activity tab shows *Terminating EC2 instance*, back to 1. Screenshot it.
 7. Copy the Activity history text into the evidence README. Any change you make by hand to *Desired capacity* must be labelled **manual**, separately from this automatic test.
+
+## Presentation-day checklist
+
+Nothing from earlier sessions exists on the day, so:
+
+1. **45 minutes before:** start the sandbox (check the session timer covers the whole presentation) and create the stack from the team repository with the final commit (see *Deploy (first time)*). Generate fresh secrets.
+2. **When `CREATE_COMPLETE`:** open the ApplicationURL, register a login, and run one comparison so the market data is cached.
+3. **During the demo:** Compare → Save this discussion → Discussions search → Open. Show the footer (server and commit) and the Auto Scaling group page.
+4. **For scaling:** show the recorded evidence in `docs/evidence/` (scale-out takes too long to show live).
+5. **Afterwards:** nothing to clean up; the sandbox deletes everything when the session ends.
 
 ## Why these resources and settings
 
@@ -87,8 +105,9 @@ The instructor accepts recorded evidence kept in the repository (decision D-02).
 
 ## Considerations and limitations
 
-- **Timing:** a new server needs about 6–9 minutes to install the app, and target tracking waits about 15 minutes of low load before removing servers. Record the scaling test in advance rather than live.
-- **Session cleanup and data loss:** the sandbox stops resources when its timer expires. Deleting the stack deletes the database. The snapshot archive bucket is retained; delete it manually when no longer needed.
+- **Session reset:** the sandbox deletes all resources, including the database, when the session timer reaches 0:00. Saved discussions do not survive between sessions; this is a property of the course sandbox, not of the design (in a normal AWS account the stack and RDS persist).
+- **Timing:** a new server needs about 5–9 minutes to install the app, and target tracking waits about 15 minutes of low load before removing servers. Record the scaling test in advance rather than live.
+- **Deleting the stack** deletes the database. The snapshot archive bucket is retained until the sandbox session ends.
 - **Snapshot archive:** a monthly timer moves stock notes whose `discussed_on` date is more than five years old from RDS to private, SSE-S3-encrypted S3 objects, verifying each object before deleting the row; S3 moves them to Glacier Flexible Retrieval after 30 days. Run it now with Session Manager: `sudo -u nimbus /opt/nimbus/.venv/bin/flask --app wsgi archive-snapshots`. Confirm `LabInstanceProfile` allows `s3:PutObject` and `s3:GetObject` on the bucket; otherwise the job fails without deleting anything.
 - **Secrets:** CloudFormation `NoEcho` hides parameter values in most displays, but the values are in the launch template's user data, readable by anyone with console access to it. Use generated secrets, never commit them, and delete the stack after the course.
 - **Per-server cache:** each server caches market data for 15 minutes in its own memory, so two servers may each fetch the same figures once. Saved discussions are unaffected: they are read from RDS.
