@@ -490,3 +490,30 @@ def test_simultaneous_copies_of_one_click_are_saved_once(monkeypatch):
     assert discussion_id(second) == first
     with app.app_context():
         assert Discussion.query.count() == 1
+
+
+def test_prices_round_the_same_on_server_pages_as_in_the_browser():
+    """AWS fix run (5 Nov): 353.905 showed as 353.91 on Compare but 353.90 in the saved record."""
+    from decimal import Decimal
+    app = make_app()
+    money = app.jinja_env.filters["money"]
+    # Expected values are what the page's JavaScript (toLocaleString) shows.
+    assert [money(v) for v in (353.905, Decimal("353.9050"), 1.005, 2.675, 1234.565, 353.9049)] == \
+        ["353.91", "353.91", "1.01", "2.68", "1,234.57", "353.90"]
+    assert money(None) == "—"
+
+
+def test_save_button_recovers_after_browser_back():
+    js = open("app/static/js/compare.js").read()
+    assert "addEventListener('pageshow'" in js
+
+
+def test_dashboard_counts_saved_discussions():
+    app = make_app()
+    rm = login(app)
+    save(rm, discussed_on=date.today().isoformat())
+    page = rm.get("/").data.decode()
+    tile = re.search(r'Discussions saved</div><div class="tile-value">(\d+)', page).group(1)
+    month = re.search(r'This month</div><div class="tile-value">(\d+)', page).group(1)
+    assert (tile, month) == ("1", "1")
+    assert 'href="/discussions"' in page

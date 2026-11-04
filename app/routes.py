@@ -71,7 +71,10 @@ def dashboard():
     stats = {
         "clients": Client.query.filter_by(rm_id=g.user.id).count(),
         "snapshots": base.count(),
-        "this_month": base.filter(Snapshot.discussed_on >= today.replace(day=1)).count(),
+        # Saved discussions (Features 3–5) are the main record; stock notes are counted separately.
+        "discussions": Discussion.query.filter_by(rm_id=g.user.id).count(),
+        "this_month": Discussion.query.filter(Discussion.rm_id == g.user.id,
+                                              Discussion.discussed_on >= today.replace(day=1)).count(),
         "due": base.filter(Snapshot.follow_up_on.isnot(None), Snapshot.follow_up_on <= today).count(),
     }
     return render_template("dashboard.html", stats=stats, follow_ups=follow_ups,

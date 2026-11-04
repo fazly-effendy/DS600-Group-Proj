@@ -512,6 +512,13 @@
     const syncClient = () => { $('new-client').hidden = clientSelect.value !== '__new__'; };
     clientSelect.addEventListener('change', syncClient);
     syncClient();
+    // Coming Back to this page restores it from the browser cache with the button still
+    // disabled; re-enable it. Saving again then sends the same one-time ID, so the server
+    // shows the record already saved instead of creating another.
+    window.addEventListener('pageshow', () => {
+      $('save-button').disabled = false;
+      $('save-button').textContent = 'Save discussion';
+    });
     // Save sends the exact figures on screen (signed by the server) and a one-time ID,
     // so the record equals the screen and one click is stored once.
     $('save-form').addEventListener('submit', (e) => {

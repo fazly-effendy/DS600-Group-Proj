@@ -1,6 +1,7 @@
 """Nimbus RM - a stock comparison and client-notes app for relationship managers."""
 import logging
 import secrets
+from decimal import ROUND_HALF_UP, Decimal
 
 from flask import Flask, abort, render_template, request, session
 
@@ -44,9 +45,11 @@ def create_app(config_class=Config):
     # ---- Template formatting helpers --------------------------------------
     @app.template_filter("money")
     def money(value):
+        """Two decimals, rounded half-up on the decimal digits, exactly like the page's
+        JavaScript (toLocaleString), so a saved 353.905 shows as 353.91 everywhere."""
         try:
-            return f"{float(value):,.2f}"
-        except (TypeError, ValueError):
+            return f"{Decimal(str(value)).quantize(Decimal('0.01'), ROUND_HALF_UP):,.2f}"
+        except (TypeError, ValueError, ArithmeticError):
             return "—"
 
     @app.template_filter("localtime")
