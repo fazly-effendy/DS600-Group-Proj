@@ -54,17 +54,16 @@
     <h2>Recent discussions</h2>
     {% if recent %}
     <ul class="list">
-      {% for s in recent %}
+      {% for d in recent %}
       <li>
-        <span class="date">{{ s.discussed_on.strftime('%d %b') }}</span>
-        <a href="{{ url_for('main.client_detail', client_id=s.client_id) }}">{{ s.client.name }}</a>
-        <span class="ticker">{{ s.ticker }}</span>
-        <span class="pill {{ s.interest_level|lower }}">{{ s.interest_level }}</span>
+        <span class="date">{{ d.discussed_on.strftime('%d %b') }}</span>
+        <a href="{{ url_for('main.discussion_detail', discussion_id=d.id) }}">{{ d.client.name }}</a>
+        {% for c in d.companies %}<span class="ticker">{{ c.ticker }}</span>{% endfor %}
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="muted">Nothing saved yet. <a href="{{ url_for('main.snapshot_new') }}">Record your first client discussion</a>.</p>
+    <p class="muted">Nothing saved yet. <a href="{{ url_for('main.compare') }}">Compare companies and save a discussion</a>.</p>
     {% endif %}
   </section>
 </div>

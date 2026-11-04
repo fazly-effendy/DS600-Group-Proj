@@ -1,6 +1,7 @@
 """Nimbus RM - a stock comparison and client-notes app for relationship managers."""
 import logging
 import secrets
+import time
 from decimal import ROUND_HALF_UP, Decimal
 
 from flask import Flask, abort, render_template, request, session
@@ -33,6 +34,17 @@ def create_app(config_class=Config):
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
     register_cli(app)
+
+    # ---- New code, new static URLs -----------------------------------------
+    # Nginx lets browsers cache /static/ for an hour. Adding the deployed commit
+    # (or the start time locally) to every static URL makes browsers fetch the new
+    # CSS/JS right after a deploy instead of running last hour's script.
+    static_version = (app.config.get("NIMBUS_COMMIT") or "")[:12] or str(int(time.time()))
+
+    @app.url_defaults
+    def _version_static_urls(endpoint, values):
+        if endpoint == "static" and "filename" in values:
+            values.setdefault("v", static_version)
 
     # ---- CSRF protection for HTML forms (no extra dependency) -------------
     def csrf_token():
