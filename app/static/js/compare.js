@@ -270,6 +270,15 @@
     $('financials-table').innerHTML = companyHeader(companies) + `<tbody>${body}</tbody>`;
   }
 
+  // Upside uses the last price shown in the Summary table (same figures as a saved record),
+  // so the two can never disagree; the server's own estimate is only a fallback.
+  function upsideFromShownPrice(r, c) {
+    const shown = state.data && state.data.companies.find((x) => x.ticker === c.ticker);
+    const target = r.view?.target_mean;
+    if (target != null && shown && shown.last_price > 0) return target / shown.last_price - 1;
+    return r.view?.upside ?? null;
+  }
+
   function renderRatings(companies) {
     const count = (k) => (r) => (r.counts && r.counts[k] != null ? String(r.counts[k]) : '—');
     const rows = [
@@ -278,7 +287,7 @@
       ['Strong buy', count('strongBuy')], ['Buy', count('buy')], ['Hold', count('hold')],
       ['Sell', count('sell')], ['Strong sell', count('strongSell')],
       ['Mean price target', (r, c) => (r.view?.target_mean != null ? `${esc(c.currency || '')} ${fmt.price(r.view.target_mean)}` : '—')],
-      ['Upside to mean target', (r) => fmt.pct(r.view?.upside, true)],
+      ['Upside to mean target', (r, c) => fmt.pct(upsideFromShownPrice(r, c), true)],
     ];
     const body = rows.map(([label, cell]) => `<tr><td>${esc(label)}</td>${companies.map((c) => {
       const r = c.ratings || {};
