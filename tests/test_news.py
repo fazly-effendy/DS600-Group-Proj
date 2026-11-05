@@ -299,3 +299,9 @@ def test_compare_page_has_financials_ratings_and_news_sections(logged_in):
         assert marker in page
     js = (ROOT / "app/static/js/compare.js").read_text()
     assert "/api/briefing" in js and "rel=\"noopener noreferrer\"" in js
+
+
+def test_upside_uses_the_price_shown_on_the_page():
+    """Found on AWS (5 Nov): upside implied a different price from the one in the Summary table."""
+    js = (ROOT / "app/static/js/compare.js").read_text()
+    assert "upsideFromShownPrice(r, c)" in js and "shown.last_price" in js

@@ -65,3 +65,22 @@ def test_update_script_is_retired():
     root = Path(__file__).resolve().parents[1]
     assert not (root / "deploy/update.sh").exists()
     assert "update.sh" not in (root / "README.md").read_text()
+
+
+def test_static_urls_change_with_each_deploy(logged_in, app):
+    """AWS (5 Nov): after a deploy the browser kept last hour's compare.js (Nginx caches /static/ 1 h)."""
+    page = logged_in.get("/compare").data.decode()
+    assert "/static/js/compare.js?v=" in page and "/static/css/style.css?v=" in page
+    from app import create_app
+    from app.config import TestConfig
+    cfg = type("C", (TestConfig,), {"NIMBUS_COMMIT": "530a7b71759f5ff31a3823d000592aa26c2971ef"})
+    with create_app(cfg).test_request_context():
+        from flask import url_for
+        assert url_for("static", filename="js/compare.js").endswith("compare.js?v=530a7b71759f")
+
+
+def test_dashboard_recent_lists_saved_discussions(logged_in, app):
+    from tests.test_discussions import save
+    save(logged_in)
+    page = logged_in.get("/").data.decode()
+    assert "Nothing saved yet" not in page and 'href="/discussions/1"' in page

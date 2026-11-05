@@ -104,6 +104,8 @@ DS600-Group-Proj/
 │   ├── nimbus.service     # systemd unit for Gunicorn
 │   ├── nimbus-archive.service # systemd service for snapshot archiving
 │   └── nimbus-archive.timer # Monthly archive schedule
+├── scripts/
+│   └── load_test.py       # Sends load from a laptop to trigger auto scaling (evidence)
 ├── docs/
 │   ├── CLOUDFRONT_SANDBOX.md # Sandbox deployment steps, rationale, considerations
 │   ├── AWS_ACADEMY_SANDBOX_LIMITATIONS.txt # AWS Academy lab restrictions and access instructions
@@ -169,7 +171,7 @@ For the full AWS Academy sandbox steps, follow **[docs/CLOUDFRONT_SANDBOX.md](do
 This is also Gaurav's acceptance test, in order:
 
 1. **Compare** — enter two or more tickers such as `AAPL, MSFT` or `D05.SI, O39.SI, U11.SI` (Singapore stocks end in `.SI`), or click a preset. You see price performance side by side (rebased to 100 or actual prices), then **Financials, ratings & news**: revenue growth, net margin and debt-to-equity, analyst ratings, and news with its source. Open **Financial ratios & trends** for year-by-year charts and industry templates.
-2. **Save** — at the bottom, under **Save this discussion**, choose a client (or add a new one with its client ID), set the discussion date, enter the **client interests** (required) and any notes or follow-up date, and click **Save discussion**. The whole comparison is stored.
+2. **Save** — at the bottom, under **Save this discussion**, choose a client (or add a new one with its client ID), set the discussion date, enter the **client interests** (required) and any notes or follow-up date, and click **Save discussion**. The whole comparison is stored. The page sends back exactly the figures it showed, with a tamper-proof signature from the server, so the record matches the screen even when a different server handles the Save; one click is stored once, even if the request is repeated.
 3. **Search** — open **Discussions** and search by client, by company (ticker such as `MSFT`, or a name such as `apple`) or by date. A client's page also lists their saved discussions.
 4. **Reopen** — click **Open**. The page shows the discussion exactly as saved (prices, ratios, financials, ratings and news), marked *Historical snapshot*. Nothing is fetched again; use *Compare again with today's data* to see current figures.
 5. **Stock notes** (optional) — a quick record about a single stock, with the price change since that discussion, filters and CSV export.
@@ -192,9 +194,10 @@ This is also Gaurav's acceptance test, in order:
 
 - **HTTPS** — CloudFront serves HTTPS with its default certificate; the hop from CloudFront to the load balancer is HTTP inside AWS, protected by the secret origin header. A custom domain with an AWS Certificate Manager certificate is not possible in the sandbox.
 - **Secrets** — the database password is passed as a CloudFormation parameter. In production it should come from AWS Secrets Manager.
+- **Sandbox resets** — the AWS Academy sandbox deletes every resource, including the database, when the session ends. The stack is created fresh at the start of each session (about 15 minutes), so saved discussions last only for that session. In a normal AWS account they would persist.
 - **Availability** — the servers scale across two Availability Zones, but the database is single-AZ (the sandbox does not support RDS Multi-AZ) and is deleted with the stack.
 - **Scaling speed** — a new server takes about 6–9 minutes to install the app, and target tracking removes servers only after about 15 minutes of low load, so scaling is visible in minutes, not seconds.
-- **Per-server memory** — each server caches market data for 15 minutes in its own memory, so two servers may briefly fetch the same figures. Saved discussions are never affected: they live in RDS.
+- **Per-server memory** — each server caches market data for 15 minutes in its own memory, so two servers can show slightly different prices for the same company at the same moment. A saved discussion always stores the figures the RM actually saw (the page sends them back, signed), and lives in RDS.
 - **Market data** — Yahoo Finance via `yfinance` is free but unofficial and may be delayed or rate-limited. A bank would use a licensed feed (Bloomberg, Refinitiv).
 - **News** — Yahoo's ticker news feed sometimes returns nothing; Nimbus then uses Yahoo search (only articles linked to the ticker that name the company) and Yahoo's RSS headline feed. RSS items have no publisher, and many search items have no summary; the page says so rather than writing one. In demo data mode no news or analyst ratings are shown at all.
 - Statement data covers the last 4–5 fiscal years; some companies (especially banks) don't report every line item, so some ratios show "—".

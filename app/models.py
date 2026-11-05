@@ -131,6 +131,7 @@ class Snapshot(db.Model):
 # columns added once. Each entry: (table, column, SQL type).
 ADDED_COLUMNS = [
     ("snapshots", "price_source", "VARCHAR(16)"),
+    ("discussions", "submission_id", "VARCHAR(64)"),
 ]
 
 
@@ -177,8 +178,11 @@ class Discussion(db.Model):
     """
 
     __tablename__ = "discussions"
+    # One Save click = one record, even if the request reaches the servers twice.
+    __table_args__ = (db.UniqueConstraint("rm_id", "submission_id", name="uq_rm_submission"),)
 
     id = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(db.String(64))  # random ID from the Compare page, one per Compare run
     rm_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
     discussed_on = db.Column(db.Date, nullable=False, index=True)
