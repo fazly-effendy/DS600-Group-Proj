@@ -1,4 +1,3 @@
-(.venv) PS C:\Users\fazly\DS600-Group-Proj> python -u scripts/load_test.py https://d14acasu5hk0nt.cloudfront.net --minutes 20 | Tee-Object load-test.log
 Sending load to https://d14acasu5hk0nt.cloudfront.net/login with 20 threads for 20 minutes. Ctrl+C to stop.
 00:41:42  874 requests/min  responses so far {'200': 437}  servers since last line: 1 ['i-098f56dc160c11619']
 00:42:12  832 requests/min  responses so far {'200': 853}  servers since last line: 1 ['i-098f56dc160c11619']
@@ -28,3 +27,13 @@ Sending load to https://d14acasu5hk0nt.cloudfront.net/login with 20 threads for 
 00:54:12  834 requests/min  responses so far {'200': 11305, 'error': 1}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
 00:54:42  884 requests/min  responses so far {'200': 11747, 'error': 1}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
 00:55:12  872 requests/min  responses so far {'200': 12182, 'error': 2}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+00:55:42  892 requests/min  responses so far {'200': 12628, 'error': 2}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+00:56:12  884 requests/min  responses so far {'200': 13070, 'error': 2}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+00:56:42  874 requests/min  responses so far {'200': 13505, 'error': 4}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+00:57:12  894 requests/min  responses so far {'200': 13952, 'error': 4}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+00:57:42  822 requests/min  responses so far {'200': 14363, 'error': 4}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+00:58:12  872 requests/min  responses so far {'200': 14799, 'error': 4}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+00:58:42  890 requests/min  responses so far {'200': 15244, 'error': 4}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+00:59:12  894 requests/min  responses so far {'200': 15691, 'error': 4}  servers since last line: 3 ['i-0083d2648e2c893e7', 'i-061db5dcf7d1c873f', 'i-098f56dc160c11619']
+Stopped.
+Total responses: {'200': 15927, 'error': 4}

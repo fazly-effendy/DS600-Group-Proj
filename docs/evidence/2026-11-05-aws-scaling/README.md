@@ -12,7 +12,7 @@
 | Phase | Result | Key evidence |
 |---|---|---|
 | Baseline | 1 server; Auto Scaling group min 1 / max 3; two target-tracking policies (CPU 60%, 300 requests per server per minute); 4 CloudWatch alarms created by AWS | `aws/03`–`07b` |
-| **Scale-out** | Load ~870 requests/min on one server (about 3× the target). The requests-high alarm fired at **00:46:03** (5 min after the load started) and the policy set desired capacity **1 → 3**. All **3 servers healthy at 00:48:45**; the load script saw 3 servers answering from 00:48:12 | `aws/12a`, `13`, `14a`, `16`; `load-test-0041-0055.txt` |
+| **Scale-out** | Load ~870 requests/min on one server (about 3× the target). The requests-high alarm fired at **00:46:03** (5 min after the load started) and the policy set desired capacity **1 → 3**. All **3 servers healthy at 00:48:45**; the load script saw 3 servers answering from 00:48:12 | `aws/12a`, `13`, `14a`, `16`; `load-test.log` |
 | **Any server serves any discussion** | The saved discussion C-SCALE-01 opened on all three servers (`i-098f56dc160c11619`, `i-0083d2648e2c893e7`, `i-061db5dcf7d1c873f`) with identical figures | `app/04`–`06` |
 | **Scale-in** | Load stopped about 00:59:30. The requests-low alarm fired at **01:16:05** (after the required 15 minutes below target); desired 3 → 2 at 01:16:05 and 2 → 1 at 01:17:05; back to 1 server at 01:18:23 | `aws/30`–`35` |
 | Reliability under load | 15,927 successful responses and 4 errors (0.03%), all after scale-out; the script does not record the error text (timeouts or dropped connections between the laptop and AWS) | `aws-report.md` §4.1 |
