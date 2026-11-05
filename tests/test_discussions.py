@@ -324,7 +324,7 @@ def test_navigation_and_pages_render():
     rm = login(app)
     did = discussion_id(save(rm))
     nav = rm.get("/compare").data
-    assert b'href="/discussions"' in nav and b"Stock notes" in nav
+    assert b'href="/snapshots"' in nav and b">Discussions</a>" in nav
     assert b'action="/discussions"' in nav  # one Save for the whole comparison
     for url in ["/discussions", f"/discussions/{did}", "/discussions?company=apple&client_id=1"]:
         assert rm.get(url).status_code == 200, url
