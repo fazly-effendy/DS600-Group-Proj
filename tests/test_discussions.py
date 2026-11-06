@@ -200,7 +200,7 @@ def test_existing_client_and_date_filters():
 
 
 @pytest.mark.parametrize("overrides, message", [
-    ({"tickers": "AAPL"}, b"at least 2"),
+    ({"tickers": ""}, b"at least 1"),
     ({"client_interests": "   "}, b"client interests"),
     ({"client_id": "", "new_client_code": ""}, b"client"),
     ({"tickers": "AAPL,<x>"}, b"not a valid ticker"),
