@@ -113,20 +113,20 @@ def compare():
 def clients():
     # Saved discussions and stock notes are counted separately; "last spoke" is the
     # latest date from either.
-    disc = (db.session.query(Discussion.client_id, func.count(Discussion.id).label("n"),
+    disc = (db.session.query(Discussion.client_id,
                              func.max(Discussion.discussed_on).label("last"))
             .filter(Discussion.rm_id == g.user.id).group_by(Discussion.client_id).subquery())
     notes = (db.session.query(Snapshot.client_id, func.count(Snapshot.id).label("n"),
                               func.max(Snapshot.discussed_on).label("last"))
              .filter(Snapshot.rm_id == g.user.id).group_by(Snapshot.client_id).subquery())
     rows = []
-    for client, n_disc, last_disc, n_notes, last_note in (
-            db.session.query(Client, disc.c.n, disc.c.last, notes.c.n, notes.c.last)
+    for client, last_disc, n_notes, last_note in (
+            db.session.query(Client, disc.c.last, notes.c.n, notes.c.last)
             .outerjoin(disc, disc.c.client_id == Client.id)
             .outerjoin(notes, notes.c.client_id == Client.id)
             .filter(Client.rm_id == g.user.id).order_by(Client.client_code)):
         last = max((d for d in (last_disc, last_note) if d), default=None)
-        rows.append((client, n_disc or 0, n_notes or 0, last))
+        rows.append((client, n_notes or 0, last))
     return render_template("clients.html", rows=rows)
 
 
