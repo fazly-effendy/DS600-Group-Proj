@@ -164,3 +164,9 @@ def test_export_neutralises_spreadsheet_formulas():
     save(rm, client_interests="=HYPERLINK(\"http://evil\")", notes="+cmd")
     row = export_rows(rm)[0]
     assert row["Client interests"].startswith("'=") and row["Notes"].startswith("'+")
+
+
+def test_compare_page_says_one_to_five():
+    app = make_app()
+    page = login(app).get("/compare").data.decode()
+    assert "1–5 ticker" in page and "2–5" not in page
