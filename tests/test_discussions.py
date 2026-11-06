@@ -324,7 +324,7 @@ def test_navigation_and_pages_render():
     rm = login(app)
     did = discussion_id(save(rm))
     nav = rm.get("/compare").data
-    assert b'href="/snapshots"' in nav and b">Discussions</a>" in nav
+    assert b'href="/snapshots"' in nav and b">Stock notes</a>" in nav
     assert b'action="/discussions"' in nav  # one Save for the whole comparison
     for url in ["/discussions", f"/discussions/{did}", "/discussions?company=apple&client_id=1"]:
         assert rm.get(url).status_code == 200, url
@@ -513,7 +513,7 @@ def test_dashboard_counts_saved_discussions():
     rm = login(app)
     save(rm, discussed_on=date.today().isoformat())
     page = rm.get("/").data.decode()
-    tile = re.search(r'Discussions saved</div><div class="tile-value">(\d+)', page).group(1)
+    tile = re.search(r'Saved comparisons</div><div class="tile-value">(\d+)', page).group(1)
     month = re.search(r'This month</div><div class="tile-value">(\d+)', page).group(1)
     assert (tile, month) == ("1", "1")
     assert 'href="/discussions"' in page

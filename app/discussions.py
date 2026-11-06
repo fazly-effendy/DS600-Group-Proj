@@ -156,7 +156,7 @@ def _already_saved(submission_id):
 
 
 def _show_existing(existing):
-    flash("This discussion was already saved; showing the saved record.", "info")
+    flash("This comparison was already saved; showing the saved record.", "info")
     return redirect(url_for("main.discussion_detail", discussion_id=existing.id))
 
 
@@ -186,10 +186,10 @@ def discussion_save():
         existing = _already_saved(submission_id)
         if existing:
             return _show_existing(existing)
-        flash("The discussion could not be saved (a client with that code was just created). " + COMPARE_AGAIN, "error")
+        flash("The comparison could not be saved (a client with that code was just created). " + COMPARE_AGAIN, "error")
         return redirect(url_for("main.compare", tickers=request.form.get("tickers", ""),
                                 period=request.form.get("period", "1y")))
-    flash(f"Saved the discussion with {discussion.client.label}. This is the record as saved; "
+    flash(f"Saved the comparison for {discussion.client.label}. This is the record as saved; "
           "reopening it never fetches new data.", "success")
     return redirect(url_for("main.discussion_detail", discussion_id=discussion.id))
 
@@ -238,5 +238,5 @@ def discussion_delete(discussion_id):
     label = d.client.label
     db.session.delete(d)
     db.session.commit()
-    flash(f"Deleted the discussion with {label}.", "success")
+    flash(f"Deleted the comparison for {label}.", "success")
     return redirect(url_for("main.discussions"))

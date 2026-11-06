@@ -14,19 +14,19 @@
     {% if tickers|length >= 2 %}
       <a class="btn" href="{{ url_for('main.compare', tickers=tickers[:5]|join(',')) }}">Compare discussed stocks</a>
     {% endif %}
-    <a class="btn" href="{{ url_for('main.snapshot_new', client_id=client.id) }}">+ Discussion</a>
+    <a class="btn" href="{{ url_for('main.snapshot_new', client_id=client.id) }}">+ Stock note</a>
   </div>
 </div>
 
 <section class="card">
   <div class="section-head">
-    <h2>Saved discussions</h2>
+    <h2>Saved comparisons</h2>
     <a class="btn" href="{{ url_for('main.compare') }}">+ New comparison</a>
   </div>
   {% if client.discussions %}
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Date</th><th>Companies (price at discussion)</th><th>Client interests</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th>Companies (price at meeting)</th><th>Client interests</th><th></th></tr></thead>
       <tbody>
       {% for d in client.discussions %}
         <tr>
@@ -41,14 +41,14 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No saved discussions yet. Compare two or more companies and use "Save this discussion".</p>
+  <p class="muted">No saved comparisons yet. Compare two or more companies and use "Save this comparison".</p>
   {% endif %}
 </section>
 
 {% if client.snapshots %}
 <section class="card">
-  <h2>Discussions</h2>
-  <p class="muted small">Discussion compares the latest market price with the price when you spoke to the client — a quick talking point for the follow-up.</p>
+  <h2>Stock notes</h2>
+  <p class="muted small">Each note compares the latest market price with the price recorded for the client — a quick talking point for the follow-up.</p>
   <ol class="timeline">
   {% for s in client.snapshots %}
     {% set now = prices.get(s.ticker) %}
@@ -66,7 +66,7 @@
           {% if now %}
             <span>Now <b class="mono">{{ s.currency }} {{ now|money }}</b></span>
             {% set chg = (now / (s.price_at_discussion|float) - 1) %}
-            <span class="chg {{ 'up' if chg >= 0 else 'down' }}">{{ chg|pct(signed=True) }} since discussion</span>
+            <span class="chg {{ 'up' if chg >= 0 else 'down' }}">{{ chg|pct(signed=True) }} since recorded</span>
           {% endif %}
         </div>
         {% if s.notes %}<p class="notes">{{ s.notes }}</p>{% endif %}
@@ -75,7 +75,7 @@
           {% if s.follow_up_on %}<span class="follow {{ 'overdue' if s.follow_up_on < today }}">Follow up {{ s.follow_up_on.strftime('%d %b %Y') }}</span>{% endif %}
           <span class="spacer"></span>
           <a href="{{ url_for('main.snapshot_edit', snapshot_id=s.id) }}">Edit</a>
-          <form method="post" action="{{ url_for('main.snapshot_delete', snapshot_id=s.id) }}" onsubmit="return confirm('Delete this discussion?')">
+          <form method="post" action="{{ url_for('main.snapshot_delete', snapshot_id=s.id) }}" onsubmit="return confirm('Delete this stock note?')">
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="link danger">Delete</button>
           </form>
@@ -88,7 +88,7 @@
 {% endif %}
 
 <form method="post" action="{{ url_for('main.client_delete', client_id=client.id) }}" class="danger-zone"
-      onsubmit="return confirm('Delete {{ client.name }} and all their discussion records? This cannot be undone.')">
+      onsubmit="return confirm('Delete {{ client.name }} and all their saved comparisons and stock notes? This cannot be undone.')">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <button class="link danger">Delete this client</button>
 </form>

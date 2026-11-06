@@ -83,7 +83,7 @@ def test_retrieve_by_client_and_ticker(logged_in, app):
     only = logged_in.get("/api/snapshots?ticker=msft").get_json()
     assert len(only) == 1 and only[0]["price_at_discussion"] == 100.0
     page = logged_in.get(f"/clients/{cid}")
-    assert b"since discussion" in page.data
+    assert b"since recorded" in page.data
     csv = logged_in.get("/snapshots/export.csv?ticker=AAPL").data.decode()
     assert "AAPL" in csv and "MSFT" not in csv
 

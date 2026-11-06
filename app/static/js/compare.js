@@ -442,7 +442,7 @@
     $('save-buttons').innerHTML = state.data.companies.map((c) => {
       // No price in the link: the server fetches the live price when the RM saves.
       const url = `${window.NIMBUS.newSnapshotUrl}?ticker=${encodeURIComponent(c.ticker)}`;
-      return `<a class="chip accent" href="${url}">Save ${esc(companyLabel(c))}</a>`;
+      return `<a class="chip accent" href="${url}">Add ${esc(c.ticker)} note</a>`;
     }).join('');
   }
 
@@ -517,7 +517,7 @@
     // shows the record already saved instead of creating another.
     window.addEventListener('pageshow', () => {
       $('save-button').disabled = false;
-      $('save-button').textContent = 'Save discussion';
+      $('save-button').textContent = 'Save comparison';
     });
     // Save sends the exact figures on screen (signed by the server) and a one-time ID,
     // so the record equals the screen and one click is stored once.

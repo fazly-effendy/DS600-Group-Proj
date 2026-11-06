@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Discussions{% endblock %}
+{% block title %}Saved comparisons{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>Saved discussions</h1>
+  <div><h1>Saved comparisons</h1>
     <p class="muted">Every saved comparison with its client interests. Search by client, company or date, then open one to see it exactly as it was saved.</p></div>
   <div class="actions"><a class="btn primary" href="{{ url_for('main.compare') }}">+ New comparison</a></div>
 </div>
@@ -25,7 +25,7 @@
 {% if rows %}
 <div class="card table-wrap">
   <table class="table">
-    <thead><tr><th>Date</th><th>Client</th><th>Companies (price at discussion)</th><th>Client interests</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Client</th><th>Companies (price at meeting)</th><th>Client interests</th><th></th></tr></thead>
     <tbody>
     {% for d in rows %}
       <tr>
@@ -45,8 +45,8 @@
 </div>
 {% else %}
 <div class="empty card">
-  <p>No saved discussions match.</p>
-  <a class="btn primary" href="{{ url_for('main.compare') }}">Compare companies and save a discussion</a>
+  <p>No saved comparisons match.</p>
+  <a class="btn primary" href="{{ url_for('main.compare') }}">Compare companies and save a comparison</a>
 </div>
 {% endif %}
 {% endblock %}
