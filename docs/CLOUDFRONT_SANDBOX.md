@@ -74,16 +74,6 @@ The instructor accepts recorded evidence kept in the repository (decision D-02).
 6. **Scale-in:** stop the load (Ctrl+C, or let it finish). About 15 minutes later the low-load alarm fires and the Activity tab shows *Terminating EC2 instance*, back to 1. Screenshot it.
 7. Copy the Activity history text into the evidence README. Any change you make by hand to *Desired capacity* must be labelled **manual**, separately from this automatic test.
 
-## Presentation-day checklist
-
-Nothing from earlier sessions exists on the day, so:
-
-1. **45 minutes before:** start the sandbox (check the session timer covers the whole presentation) and create the stack from the team repository with the final commit (see *Deploy (first time)*). Generate fresh secrets.
-2. **When `CREATE_COMPLETE`:** open the ApplicationURL, register a login, and run one comparison so the market data is cached.
-3. **During the demo:** Compare → Save this discussion → Discussions search → Open. Show the footer (server and commit) and the Auto Scaling group page.
-4. **For scaling:** show the recorded evidence in `docs/evidence/` (scale-out takes too long to show live).
-5. **Afterwards:** nothing to clean up; the sandbox deletes everything when the session ends.
-
 ## Why these resources and settings
 
 | Resource or setting | Reason |
