@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Discussion with {{ d.client.name }}{% endblock %}
+{% block title %}Comparison for {{ d.client.name }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <p class="crumb"><a href="{{ url_for('main.discussions') }}">Discussions</a> /</p>
+    <p class="crumb"><a href="{{ url_for('main.discussions') }}">Saved comparisons</a> /</p>
     <h1>{{ d.client.name }} · {{ d.discussed_on.strftime('%d %b %Y') }}</h1>
     <p class="muted"><a class="mono" href="{{ url_for('main.client_detail', client_id=d.client_id) }}">{{ d.client.client_code }}</a>
       · {{ d.companies | map(attribute='ticker') | join(', ') }} · period {{ d.period }}</p>
@@ -20,10 +20,10 @@
 </div>
 
 <section class="card">
-  <h2>Discussion record</h2>
+  <h2>Comparison record</h2>
   <dl class="record">
     <dt>Client</dt><dd>{{ d.client.label }}</dd>
-    <dt>Discussion date</dt><dd>{{ d.discussed_on.strftime('%d %b %Y') }}</dd>
+    <dt>Meeting date</dt><dd>{{ d.discussed_on.strftime('%d %b %Y') }}</dd>
     <dt>Client interests</dt><dd class="prewrap">{{ d.client_interests }}</dd>
     {% if d.notes %}<dt>Notes</dt><dd class="prewrap">{{ d.notes }}</dd>{% endif %}
     {% if d.follow_up_on %}<dt>Follow up on</dt><dd>{{ d.follow_up_on.strftime('%d %b %Y') }}</dd>{% endif %}
@@ -31,7 +31,7 @@
   </dl>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Company</th><th class="num">Price at discussion</th><th>Price date</th>
+      <thead><tr><th>Company</th><th class="num">Price at meeting</th><th>Price date</th>
         <th class="num">Revenue growth</th><th class="num">Net margin</th><th class="num">Debt-to-equity</th><th>Fiscal year</th></tr></thead>
       <tbody>
       {% for c in d.companies %}
@@ -50,9 +50,9 @@
     </table>
   </div>
   <form method="post" action="{{ url_for('main.discussion_delete', discussion_id=d.id) }}" class="danger-zone"
-        onsubmit="return confirm('Delete this saved discussion? This cannot be undone.')">
+        onsubmit="return confirm('Delete this saved comparison? This cannot be undone.')">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <button class="link danger">Delete this discussion</button>
+    <button class="link danger">Delete this comparison</button>
   </form>
 </section>
 

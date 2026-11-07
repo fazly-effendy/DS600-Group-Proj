@@ -26,7 +26,7 @@
   <div class="form-row">
     <label>Ticker
       <input name="ticker" id="ticker" value="{{ form.get('ticker','') }}" placeholder="e.g. D05.SI" required autocomplete="off" style="text-transform:uppercase"></label>
-    <label>Price at discussion <span class="hint">leave blank to use the latest live price; a typed price is saved as "Entered by RM"</span>
+    <label>Price at discussion <span class="hint">leave blank to fetch the latest live price automatically; if you enter a price, its source will be labelled "Entered by RM"</span>
       <div class="input-btn">
         <input name="price" id="price" inputmode="decimal" value="{{ form.get('price','') }}">
         <button type="button" class="btn" id="fetch-price">Get price</button>
@@ -35,7 +35,7 @@
   <p class="muted small" id="quote-info"></p>
 
   <div class="form-row">
-    <label>Date of discussion <input type="date" name="discussed_on" value="{{ form.get('discussed_on') or today.isoformat() }}"></label>
+    <label>Date discussed with client <input type="date" name="discussed_on" value="{{ form.get('discussed_on') or today.isoformat() }}"></label>
     <label>Client interest
       <select name="interest_level">
         {% for l in levels %}<option {{ 'selected' if (form.get('interest_level') or 'Medium') == l }}>{{ l }}</option>{% endfor %}
@@ -51,7 +51,7 @@
 
   <div class="form-actions">
     <a class="btn" href="{{ url_for('main.snapshots') }}">Cancel</a>
-    <button class="btn primary">{{ 'Save changes' if snap else 'Save discussion' }}</button>
+    <button class="btn primary">{{ 'Save changes' if snap else 'Save stock note' }}</button>
   </div>
 </form>
 {% endblock %}

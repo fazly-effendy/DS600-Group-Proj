@@ -16,10 +16,10 @@
   <a class="tile tile-link" href="{{ url_for('main.clients') }}" aria-label="View all clients">
     <div class="tile-label">Clients</div><div class="tile-value">{{ stats.clients }}</div><span class="tile-action">View clients →</span>
   </a>
-  <a class="tile tile-link" href="{{ url_for('main.discussions') }}" aria-label="View all saved discussions">
-    <div class="tile-label">Discussions saved</div><div class="tile-value">{{ stats.discussions }}</div><span class="tile-action">View discussions →</span>
+  <a class="tile tile-link" href="{{ url_for('main.discussions') }}" aria-label="View all saved comparisons">
+    <div class="tile-label">Saved comparisons</div><div class="tile-value">{{ stats.discussions }}</div><span class="tile-action">View comparisons →</span>
   </a>
-  <a class="tile tile-link" href="{{ url_for('main.discussions', date_from=month_start) }}" aria-label="View this month's discussions">
+  <a class="tile tile-link" href="{{ url_for('main.discussions', date_from=month_start) }}" aria-label="View this month's saved comparisons">
     <div class="tile-label">This month</div><div class="tile-value">{{ stats.this_month }}</div><span class="tile-action">View this month →</span>
   </a>
   <a class="tile tile-link {{ 'alert' if stats.due }}" href="{{ url_for('main.snapshots', follow_up='due') }}" aria-label="View follow-ups due">
@@ -47,11 +47,11 @@
       </li>
       {% endfor %}
     </ul>
-    {% else %}<p class="muted">No follow-ups scheduled. Add a follow-up date when you record a discussion.</p>{% endif %}
+    {% else %}<p class="muted">No follow-ups scheduled. Add a follow-up date when you record a stock note.</p>{% endif %}
   </section>
 
   <section class="card">
-    <h2>Recent discussions</h2>
+    <h2>Recent comparisons</h2>
     {% if recent %}
     <ul class="list">
       {% for d in recent %}
@@ -63,7 +63,7 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="muted">Nothing saved yet. <a href="{{ url_for('main.compare') }}">Compare companies and save a discussion</a>.</p>
+    <p class="muted">Nothing saved yet. <a href="{{ url_for('main.compare') }}">Compare companies and save a comparison</a>.</p>
     {% endif %}
   </section>
 </div>

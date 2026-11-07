@@ -42,9 +42,9 @@
 <div id="results" hidden>
   {% include "_comparison_results.html" %}
 
-  <!-- 6. Save the whole comparison as a client discussion (Features 3–5) -->
+  <!-- 6. Save the whole comparison for a client (Features 3–5) -->
   <section class="card" id="save-card">
-    <h2>Save this discussion</h2>
+    <h2>Save this comparison</h2>
     <p class="muted small">Saves everything above for one client: prices, financials, ratings and news as they are now, with the client's interests and your notes. Reopening it later shows exactly this, never today's data. Demo data is never saved as a client record.</p>
     <form method="post" action="{{ url_for('main.discussion_save') }}" id="save-form" class="form save-form">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -63,7 +63,7 @@
             {% for c in clients %}<option value="{{ c.id }}">{{ c.label }}</option>{% endfor %}
             <option value="__new__" {{ 'selected' if not clients }}>+ New client…</option>
           </select></label>
-        <label>Discussion date
+        <label>Meeting date
           <input type="date" name="discussed_on" value="{{ today.isoformat() }}" required></label>
       </div>
       <fieldset id="new-client" class="subfields" hidden>
@@ -77,11 +77,11 @@
       <div class="form-row">
         <label>Follow up on <span class="hint">optional</span>
           <input type="date" name="follow_up_on"></label>
-        <div class="form-actions align-end"><button class="btn primary" id="save-button">Save discussion</button></div>
+        <div class="form-actions align-end"><button class="btn primary" id="save-button">Save comparison</button></div>
       </div>
     </form>
     <details class="single-notes">
-      <summary class="muted small">Or record a quick note about one stock</summary>
+      <summary class="muted small">Or save a stock note for one company</summary>
       <div id="save-buttons" class="chips"></div>
     </details>
   </section>

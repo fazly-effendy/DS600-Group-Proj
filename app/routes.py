@@ -72,7 +72,7 @@ def dashboard():
     stats = {
         "clients": Client.query.filter_by(rm_id=g.user.id).count(),
         "snapshots": base.count(),
-        # Saved discussions (Features 3–5) are the main record; stock notes are counted separately.
+        # Saved comparisons (Features 3–5) are the main record; stock notes are counted separately.
         "discussions": Discussion.query.filter_by(rm_id=g.user.id).count(),
         "this_month": Discussion.query.filter(Discussion.rm_id == g.user.id,
                                               Discussion.discussed_on >= today.replace(day=1)).count(),
@@ -111,7 +111,7 @@ def compare():
 @bp.route("/clients")
 @login_required
 def clients():
-    # Saved discussions and stock notes are counted separately; "last spoke" is the
+    # Saved comparisons and stock notes are counted separately; "last spoke" is the
     # latest date from either.
     disc = (db.session.query(Discussion.client_id,
                              func.max(Discussion.discussed_on).label("last"))
@@ -316,7 +316,7 @@ def snapshot_new():
                                    levels=Snapshot.INTEREST_LEVELS, today=local_today())
         db.session.add(snap)
         db.session.commit()
-        flash(f"Saved discussion with {snap.client.label} about {snap.ticker}.", "success")
+        flash(f"Saved stock note for {snap.client.label} about {snap.ticker}.", "success")
         return redirect(url_for("main.client_detail", client_id=snap.client_id))
     # The price is never taken from the URL: it is fetched live on save, or typed by the RM.
     prefill = {"ticker": request.args.get("ticker", ""), "client_id": request.args.get("client_id", "")}
@@ -336,7 +336,7 @@ def snapshot_edit(snapshot_id):
             flash(error, "error")
         else:
             db.session.commit()
-            flash("Discussion updated.", "success")
+            flash("Stock note updated.", "success")
             return redirect(url_for("main.client_detail", client_id=snap.client_id))
     form = {
         "ticker": snap.ticker, "price": snap.price_at_discussion, "client_id": str(snap.client_id),

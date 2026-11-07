@@ -2,10 +2,10 @@
 {% block title %}Stock notes{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>Discussions</h1><p class="muted">Discussions about stocks for a client. To save a full comparison, use <a href="{{ url_for('main.compare') }}">Compare</a> → Save this discussion.</p></div>
+  <div><h1>Stock notes</h1><p class="muted">Quick notes about individual stocks for a client. To save a complete multi-company comparison, go to <a href="{{ url_for('main.compare') }}">Compare</a> → Save comparison.</p></div>
   <div class="actions">
     <a class="btn" href="{{ url_for('main.snapshots_export', **args) }}">Export CSV</a>
-    <a class="btn primary" href="{{ url_for('main.snapshot_new') }}">+ Discussion</a>
+    <a class="btn primary" href="{{ url_for('main.snapshot_new') }}">+ Stock note</a>
   </div>
 </div>
 
@@ -71,8 +71,8 @@
     </tbody>
   </table>
 </div>
-<p class="muted small">{{ rows|length }} discussion{{ 's' if rows|length != 1 }} shown.</p>
+<p class="muted small">{{ rows|length }} stock note{{ 's' if rows|length != 1 }} shown.</p>
 {% else %}
-<div class="empty card"><p>No discussions match these filters.</p></div>
+<div class="empty card"><p>No stock notes match these filters.</p></div>
 {% endif %}
 {% endblock %}

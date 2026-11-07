@@ -9,7 +9,7 @@
 {% if rows %}
 <div class="card table-wrap">
   <table class="table">
-    <thead><tr><th>Code</th><th>Name</th><th>Segment</th><th>Risk profile</th><th class="num">Discussions</th><th>Last spoke</th></tr></thead>
+    <thead><tr><th>Code</th><th>Name</th><th>Segment</th><th>Risk profile</th><th class="num">Stock notes</th><th>Last spoke</th></tr></thead>
     <tbody>
     {% for c, n_notes, last in rows %}
       <tr class="clickable" onclick="location.href='{{ url_for('main.client_detail', client_id=c.id) }}'">
