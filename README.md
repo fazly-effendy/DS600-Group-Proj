@@ -204,24 +204,22 @@ This is also Gaurav's acceptance test, in order:
 
 ---
 
-## Team
+## Team and contributions
 
-Group 1, DS600. The table lists each member's main work as it appears in this repository's commit and pull-request history (`git log`); the full history is on GitHub.
+**Aastha**
+Built the first working version of Nimbus RM, including the Flask application structure, company-comparison page, client notes, Yahoo Finance market-data module and initial automated tests. This formed the foundation for the subsequent project work. She also reviewed later application changes.
 
-| Member | Role | Main contributions |
-|---|---|---|
-| **Aastha** | Application foundation; reviewer for app code | Built the first version of Nimbus RM (7 Oct): the Flask app, company comparison page, client notes, market-data module and the first test suite. |
-| **Parth Uday Joglekar** | AWS deployment and repository owner | Wrote the merged CloudFormation stack and the CloudFront setup, the EC2 setup script and Nginx origin-token configuration; organised the repository structure and README; updated the UI (5 Nov); reviewed and merged the team's pull requests. |
-| **Jiang Minglan (Mina)** | UI, usability and documentation | Improved company search, dashboard navigation and the at-a-glance cards; reworked the client table and the wording that separates saved comparisons from stock notes; refreshed screenshots; reviewed features from a user's point of view. |
-| **Fazly Effendy** | Feature completion, scaling and AWS testing; team coordination | Delivered Feature 1 (financials, analyst ratings, sourced news), Features 3–5 (save, search and reopen a whole comparison) and Feature 6 (load balancer and Auto Scaling group); fixed the defects found on AWS; ran the AWS deployments, rolling update and scaling test recorded in `docs/evidence/`. |
+**Parth Uday Joglekar**
+Established the original AWS-hosting foundation by consolidating the infrastructure into a CloudFormation stack with CloudFront, preparing the EC2 setup and Nginx configuration, and organising the repository and README. He owned the submission repository, updated the user interface, and reviewed and merged the team's pull requests.
 
-**How each of us contributed, in our own words**
+**Jiang Minglan (Mina)**
+Focused on usability by improving company search, dashboard navigation and the at-a-glance cards. She revised the client-table presentation and interface wording based on an RM's perspective, reviewed the application workflow, and refreshed the screenshots.
 
-- **Aastha:** _to be written by Aastha_
-- **Parth Uday Joglekar:** _to be written by Parth_
-- **Jiang Minglan (Mina):** _to be written by Mina_
-- **Fazly Effendy:** _to be written by Fazly_
+**Fazly Effendy**
+Coordinated the team and completed the remaining required features: the one-screen briefing with financials, analyst ratings and sourced news (Feature 1); saving, searching and reopening complete comparisons (Features 3–5); and automatic scaling through an Application Load Balancer and Auto Scaling Group (Feature 6). He ran the AWS deployments and scaling tests, corrected defects found during AWS testing, and recorded the results in `docs/evidence/`.
 
-**Use of AI tools:** the course encourages AI tools. Fazly used Claude Code, an AI coding assistant, for his pull requests; those commits show the author `Claude`.
+### AI-assisted development
+
+Claude Code assisted with parts of the initial application and later feature, infrastructure, testing and documentation work. Team members defined the requirements and implementation decisions, reviewed the generated changes, ran the automated tests, performed the AWS deployments, and verified the final behaviour.
 
 *Market data is for discussion purposes only and is not investment advice.*
