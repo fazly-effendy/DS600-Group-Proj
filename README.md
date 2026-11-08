@@ -158,7 +158,7 @@ For the full AWS Academy sandbox steps, follow **[docs/CLOUDFRONT_SANDBOX.md](do
 
 1. Make sure the commit you want to deploy is on GitHub (the repository must be public so the servers can clone it), and copy its hash: `git rev-parse HEAD`.
 2. In **us-east-1**, create a CloudFormation stack from `infra/nimbus-merged-stack.yaml`. Enter the repository URL, the **GitCommit** hash, and generated secrets.
-3. Wait for the stack to reach `CREATE_COMPLETE` (about 20–25 minutes, mostly the database and CloudFront), then open the `ApplicationURL` output. Register a login on the app's Register page.
+3. Wait for the stack to reach `CREATE_COMPLETE` (about 15 minutes in our runs (13–16), mostly the database and CloudFront), then open the `ApplicationURL` output. Register a login on the app's Register page.
 
 **To deploy new code:** on the stack choose **Update → Use current template**, change only **GitCommit**, and submit. The Auto Scaling group starts a server with the new commit, waits for it to report healthy, then removes an old one. The site stays up and the database is untouched. The footer shows the new commit when it is done.
 
