@@ -222,6 +222,6 @@ Group 1, DS600. The table lists each member's main work as it appears in this re
 - **Jiang Minglan (Mina):** _to be written by Mina_
 - **Fazly Effendy:** _to be written by Fazly_
 
-**Use of AI tools:** Fazly's pull requests were written with Claude Code (an AI coding assistant) under his direction and review; those commits show the author `Claude`. Each of those pull requests was tested locally and on AWS before it was merged.
+**Use of AI tools:** the course encourages AI tools. Fazly used Claude Code, an AI coding assistant, for his pull requests; those commits show the author `Claude`.
 
 *Market data is for discussion purposes only and is not investment advice.*
