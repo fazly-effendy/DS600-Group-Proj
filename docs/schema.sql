@@ -58,6 +58,7 @@ CREATE INDEX ix_snapshots_ticker ON snapshots (ticker);
 -- shown, so a discussion reopens exactly as saved without new market data.
 CREATE TABLE discussions (
 	id INTEGER NOT NULL AUTO_INCREMENT, 
+	submission_id VARCHAR(64), 
 	rm_id INTEGER NOT NULL, 
 	client_id INTEGER NOT NULL, 
 	discussed_on DATE NOT NULL, 
@@ -70,6 +71,7 @@ CREATE TABLE discussions (
 	data_source VARCHAR(16) NOT NULL, 
 	snapshot_json MEDIUMTEXT NOT NULL, 
 	PRIMARY KEY (id), 
+	CONSTRAINT uq_rm_submission UNIQUE (rm_id, submission_id), 
 	FOREIGN KEY(rm_id) REFERENCES users (id), 
 	FOREIGN KEY(client_id) REFERENCES clients (id)
 ) ENGINE=InnoDB;

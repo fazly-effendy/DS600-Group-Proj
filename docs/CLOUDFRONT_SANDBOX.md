@@ -35,7 +35,7 @@ CloudFront provides HTTPS at its generated `*.cloudfront.net` hostname, so no do
    - **GitCommit**: the hash from step 2.
    - **AppSecretKey**, **OriginVerifyToken**, **DBPassword**: the values from step 3.
    - Leave the rest at their defaults (`t3.micro`, CPU target 60%, 300 requests per server per minute). Leave **KeyName** empty and use Session Manager unless you need SSH.
-6. Submit and wait for `CREATE_COMPLETE` (about 20–25 minutes; RDS and CloudFront take the longest). The stack completes only after a server has installed the app and signalled that it is healthy.
+6. Submit and wait for `CREATE_COMPLETE` (13–16 minutes in our runs; RDS and CloudFront take the longest). The stack completes only after a server has installed the app and signalled that it is healthy.
 7. Open the **ApplicationURL** output. If Chrome warns, check the address starts with `https://`. Register a login on the Register page (or seed demo data with Session Manager: `cd /opt/nimbus && sudo -u nimbus .venv/bin/flask --app wsgi seed-demo`).
 8. The page footer shows **Server i-… · commit …**: which server answered and which commit it runs.
 

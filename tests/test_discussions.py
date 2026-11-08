@@ -325,6 +325,8 @@ def test_navigation_and_pages_render():
     did = discussion_id(save(rm))
     nav = rm.get("/compare").data
     assert b'href="/snapshots"' in nav and b">Stock notes</a>" in nav
+    # Feature 5's search page is one click away from every page (README "Using the app", step 3)
+    assert b'href="/discussions"' in nav and b">Saved comparisons</a>" in nav
     assert b'action="/discussions"' in nav  # one Save for the whole comparison
     for url in ["/discussions", f"/discussions/{did}", "/discussions?company=apple&client_id=1"]:
         assert rm.get(url).status_code == 200, url

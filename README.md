@@ -158,7 +158,7 @@ For the full AWS Academy sandbox steps, follow **[docs/CLOUDFRONT_SANDBOX.md](do
 
 1. Make sure the commit you want to deploy is on GitHub (the repository must be public so the servers can clone it), and copy its hash: `git rev-parse HEAD`.
 2. In **us-east-1**, create a CloudFormation stack from `infra/nimbus-merged-stack.yaml`. Enter the repository URL, the **GitCommit** hash, and generated secrets.
-3. Wait for the stack to reach `CREATE_COMPLETE` (about 20–25 minutes, mostly the database and CloudFront), then open the `ApplicationURL` output. Register a login on the app's Register page.
+3. Wait for the stack to reach `CREATE_COMPLETE` (about 15 minutes in our runs (13–16), mostly the database and CloudFront), then open the `ApplicationURL` output. Register a login on the app's Register page.
 
 **To deploy new code:** on the stack choose **Update → Use current template**, change only **GitCommit**, and submit. The Auto Scaling group starts a server with the new commit, waits for it to report healthy, then removes an old one. The site stays up and the database is untouched. The footer shows the new commit when it is done.
 
@@ -201,5 +201,29 @@ This is also Gaurav's acceptance test, in order:
 - **Market data** — Yahoo Finance via `yfinance` is free but unofficial and may be delayed or rate-limited. A bank would use a licensed feed (Bloomberg, Refinitiv).
 - **News** — Yahoo's ticker news feed sometimes returns nothing; Nimbus then uses Yahoo search (only articles linked to the ticker that name the company) and Yahoo's RSS headline feed. RSS items have no publisher, and many search items have no summary; the page says so rather than writing one. In demo data mode no news or analyst ratings are shown at all.
 - Statement data covers the last 4–5 fiscal years; some companies (especially banks) don't report every line item, so some ratios show "—".
+
+---
+
+## Team and contributions
+
+### Aastha
+
+Built the first working version of Nimbus RM, including the Flask application structure, company-comparison page, client notes, Yahoo Finance market-data module and initial automated tests. This formed the foundation for the subsequent project work. She also reviewed later application changes.
+
+### Parth Uday Joglekar
+
+Established the original AWS-hosting foundation by consolidating the infrastructure into a CloudFormation stack with CloudFront, preparing the EC2 setup and Nginx configuration, and organising the repository and README. He owned the submission repository, updated the user interface, and reviewed and merged the team's pull requests.
+
+### Jiang Minglan (Mina)
+
+Focused on usability by improving company search, dashboard navigation and the at-a-glance cards. She revised the client-table presentation and interface wording based on an RM's perspective, reviewed the application workflow, and refreshed the screenshots.
+
+### Fazly Effendy
+
+Coordinated the team and completed the remaining required features: the one-screen briefing with financials, analyst ratings and sourced news (Feature 1); saving, searching and reopening complete comparisons (Features 3–5); and automatic scaling through an Application Load Balancer and Auto Scaling Group (Feature 6). He ran the AWS deployments and scaling tests, corrected defects found during AWS testing, and recorded the results in `docs/evidence/`.
+
+### AI-assisted development
+
+Claude Code assisted with parts of the initial application and later feature, infrastructure, testing and documentation work. Team members defined the requirements and implementation decisions, reviewed the generated changes, ran the automated tests, performed the AWS deployments, and verified the final behaviour.
 
 *Market data is for discussion purposes only and is not investment advice.*
