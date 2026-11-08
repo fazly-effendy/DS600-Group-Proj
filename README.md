@@ -212,15 +212,15 @@ Group 1, DS600. The table lists each member's main work as it appears in this re
 |---|---|---|
 | **Aastha** | Application foundation; reviewer for app code | Built the first version of Nimbus RM (7 Oct): the Flask app, company comparison page, client notes, market-data module and the first test suite. |
 | **Parth Uday Joglekar** | AWS deployment and repository owner | Wrote the merged CloudFormation stack and the CloudFront setup, the EC2 setup script and Nginx origin-token configuration; organised the repository structure and README; updated the UI (5 Nov); reviewed and merged the team's pull requests. |
-| **Jiang Minglan** | UI, usability and documentation | Improved company search, dashboard navigation and the at-a-glance cards; reworked the client table and the wording that separates saved comparisons from stock notes; refreshed screenshots; reviewed features from a user's point of view. |
-| **Fazly** | Feature completion, scaling and AWS testing; team coordination | Delivered Feature 1 (financials, analyst ratings, sourced news), Features 3–5 (save, search and reopen a whole comparison) and Feature 6 (load balancer and Auto Scaling group); fixed the defects found on AWS; ran the AWS deployments, rolling update and scaling test recorded in `docs/evidence/`. |
+| **Jiang Minglan (Mina)** | UI, usability and documentation | Improved company search, dashboard navigation and the at-a-glance cards; reworked the client table and the wording that separates saved comparisons from stock notes; refreshed screenshots; reviewed features from a user's point of view. |
+| **Fazly Effendy** | Feature completion, scaling and AWS testing; team coordination | Delivered Feature 1 (financials, analyst ratings, sourced news), Features 3–5 (save, search and reopen a whole comparison) and Feature 6 (load balancer and Auto Scaling group); fixed the defects found on AWS; ran the AWS deployments, rolling update and scaling test recorded in `docs/evidence/`. |
 
 **How each of us contributed, in our own words**
 
 - **Aastha:** _to be written by Aastha_
-- **Parth:** _to be written by Parth_
-- **Jiang Minglan:** _to be written by Jiang Minglan_
-- **Fazly:** _to be written by Fazly_
+- **Parth Uday Joglekar:** _to be written by Parth_
+- **Jiang Minglan (Mina):** _to be written by Mina_
+- **Fazly Effendy:** _to be written by Fazly_
 
 **Use of AI tools:** Fazly's pull requests were written with Claude Code (an AI coding assistant) under his direction and review; those commits show the author `Claude`. Each of those pull requests was tested locally and on AWS before it was merged.
 
