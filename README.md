@@ -206,16 +206,20 @@ This is also Gaurav's acceptance test, in order:
 
 ## Team and contributions
 
-**Aastha**
+### Aastha
+
 Built the first working version of Nimbus RM, including the Flask application structure, company-comparison page, client notes, Yahoo Finance market-data module and initial automated tests. This formed the foundation for the subsequent project work. She also reviewed later application changes.
 
-**Parth Uday Joglekar**
+### Parth Uday Joglekar
+
 Established the original AWS-hosting foundation by consolidating the infrastructure into a CloudFormation stack with CloudFront, preparing the EC2 setup and Nginx configuration, and organising the repository and README. He owned the submission repository, updated the user interface, and reviewed and merged the team's pull requests.
 
-**Jiang Minglan (Mina)**
+### Jiang Minglan (Mina)
+
 Focused on usability by improving company search, dashboard navigation and the at-a-glance cards. She revised the client-table presentation and interface wording based on an RM's perspective, reviewed the application workflow, and refreshed the screenshots.
 
-**Fazly Effendy**
+### Fazly Effendy
+
 Coordinated the team and completed the remaining required features: the one-screen briefing with financials, analyst ratings and sourced news (Feature 1); saving, searching and reopening complete comparisons (Features 3–5); and automatic scaling through an Application Load Balancer and Auto Scaling Group (Feature 6). He ran the AWS deployments and scaling tests, corrected defects found during AWS testing, and recorded the results in `docs/evidence/`.
 
 ### AI-assisted development
